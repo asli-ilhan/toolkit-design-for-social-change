@@ -31,6 +31,10 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Push your code to GitHub and import the repo in [Vercel](https://vercel.com/new).
+2. **Environment variables** (Vercel → Project → Settings → Environment Variables):
+   - `NEXT_PUBLIC_SUPABASE_URL` — your Supabase project URL (e.g. `https://xxxx.supabase.co`)
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — your Supabase anon/public key
+3. Deploy. The build uses `next build`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**Supabase:** Run `supabase/schema.sql` in the Supabase Dashboard → SQL Editor (including the `workshop_state` table and RLS policies) so the app and phase control work in production. Create a storage bucket named `wizard` if you use photo uploads.
