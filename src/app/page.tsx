@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
@@ -77,7 +77,7 @@ const USER_FOCUS_OPTIONS = [
   { value: "both", label: "Both" },
 ];
 
-export default function Home() {
+function HomeContent() {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [groupConfig, setGroupConfig] = useState<GroupConfig | null>(null);
   const [loggedClaims, setLoggedClaims] = useState<LoggedClaim[]>([]);
@@ -576,6 +576,14 @@ Before Phase 3:
         Use evidence that can safely be shared in class.
       </div>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="flex flex-1 flex-col gap-6 p-6 text-center text-sm text-white/60">Loading…</div>}>
+      <HomeContent />
+    </Suspense>
   );
 }
 
