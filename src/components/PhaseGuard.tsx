@@ -32,15 +32,15 @@ export function PhaseGuard({ allowedPhases, children }: Props) {
 
 function phaseLabel(p: WorkshopPhase): string {
   switch (p) {
+    case "0":
+      return "Phase 0 — Claimed Access Scan";
     case "1":
       return "Phase 1 — Evidence Collection";
-    case "2_categories":
-      return "Phase 2 — Categories";
-    case "2_story":
-      return "Phase 2 — Storyboard";
+    case "2":
+      return "Phase 2";
     case "3":
       return "Phase 3 — Public Contribution";
     default:
-      return p;
+      return String(p);
   }
 }

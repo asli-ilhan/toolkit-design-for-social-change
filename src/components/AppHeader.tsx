@@ -29,9 +29,10 @@ function NavLink({
 export function AppHeader() {
   const { phase } = usePhase();
 
-  const categoryDisabled = phase === "1" || phase === "2_story" || phase === "3";
-  const storyBoardDisabled = phase === "1" || phase === "2_categories";
-  const osmDisabled = phase === "1" || phase === "2_categories" || phase === "2_story";
+  const categoryDisabled = phase === "0" || phase === "1" || phase === "3";
+  const storyBoardDisabled = phase === "0" || phase === "1" || phase === "3";
+  const osmDisabled = phase === "0" || phase === "1" || phase === "2";
+  const wheelMapDisabled = phase === "0" || phase === "1" || phase === "2";
 
   return (
     <header className="border-b border-white/10 bg-black/80 px-4 py-3 backdrop-blur-sm">
@@ -50,7 +51,8 @@ export function AppHeader() {
           <NavLink href="/map" label="Map" />
           <NavLink href="/story-board" label="Story Board" disabled={storyBoardDisabled} />
           <NavLink href="/category" label="Category" disabled={categoryDisabled} />
-          <NavLink href="/osm-helper" label="OSM Helper" disabled={osmDisabled} />
+          <NavLink href="/wheelmap-helper" label="WheelMap" disabled={wheelMapDisabled} />
+          <NavLink href="/osm-helper" label="OSM" disabled={osmDisabled} />
           <NavLink href="/export" label="Export" />
         </nav>
       </div>

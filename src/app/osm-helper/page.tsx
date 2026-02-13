@@ -4,6 +4,8 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { PhaseGuard } from "@/components/PhaseGuard";
+import { usePhase } from "@/lib/PhaseContext";
+import Link from "next/link";
 
 const EXAMPLE_NOTE = {
   location_text: "UAL Camberwell Peckham Building, lift bank near main reception (Entrance A)",
@@ -34,9 +36,19 @@ Expected: ${j.expected_outcome}
 Attribution: Week 6 Access Journey (MA IE)`;
 }
 
+type JourneyMeta = {
+  mode: string;
+  user_focus: string | null;
+  claimed_access_statement: string | null;
+  issue_scope: string | null;
+  evidenceCount: number;
+  guidanceCount: number;
+};
+
 function OSMHelperContent() {
   const searchParams = useSearchParams();
   const journeyId = searchParams.get("journey");
+  const { phase } = usePhase();
   const defaultNoteText = useMemo(() => buildNoteText(EXAMPLE_NOTE), []);
   const [noteText, setNoteText] = useState(defaultNoteText);
   const [loading, setLoading] = useState(!!journeyId);
@@ -45,10 +57,14 @@ function OSMHelperContent() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [noPersonalDataConfirmed, setNoPersonalDataConfirmed] = useState(false);
+  const [journeyMeta, setJourneyMeta] = useState<JourneyMeta | null>(null);
+  const [wheelmapAccessibility, setWheelmapAccessibility] = useState<string>("");
+  const [wheelmapNoPersonalConfirmed, setWheelmapNoPersonalConfirmed] = useState(false);
 
   useEffect(() => {
     if (!journeyId) {
       setNoteText(defaultNoteText);
+      setJourneyMeta(null);
       setLoading(false);
       return;
     }
@@ -59,21 +75,41 @@ function OSMHelperContent() {
         const { data, error } = await supabase
           .from("journeys")
           .select(
-            "location_text, campus_or_system, what_happened, expected_outcome, osm_note_url",
+            "location_text, campus_or_system, what_happened, expected_outcome, osm_note_url, mode, user_focus, claimed_access_statement, issue_scope",
           )
           .eq("id", journeyId)
           .single();
         if (error) throw error;
         if (!cancelled && data) {
-          setNoteText(buildNoteText(data as any));
-          if (data.osm_note_url) {
-            setOsmUrl(data.osm_note_url as string);
-          }
+          const d = data as any;
+          setNoteText(buildNoteText(d));
+          if (d.osm_note_url) setOsmUrl(d.osm_note_url as string);
+
+          const { data: evData } = await supabase
+            .from("evidence")
+            .select("id, type")
+            .eq("journey_id", journeyId);
+          const evidence = (evData ?? []) as { type: string }[];
+          const evidenceCount = evidence.length;
+          const guidanceCount = evidence.filter((e) => e.type === "policy_doc").length;
+
+          setJourneyMeta({
+            mode: d.mode ?? "physical",
+            user_focus: d.user_focus ?? null,
+            claimed_access_statement: d.claimed_access_statement ?? null,
+            issue_scope: d.issue_scope ?? null,
+            evidenceCount,
+            guidanceCount,
+          });
         } else if (!cancelled) {
           setNoteText(defaultNoteText);
+          setJourneyMeta(null);
         }
       } catch {
-        if (!cancelled) setNoteText(defaultNoteText);
+        if (!cancelled) {
+          setNoteText(defaultNoteText);
+          setJourneyMeta(null);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -83,6 +119,19 @@ function OSMHelperContent() {
       cancelled = true;
     };
   }, [journeyId, defaultNoteText]);
+
+  const readyForPublicContribution =
+    journeyId &&
+    phase === "3" &&
+    journeyMeta &&
+    Boolean(journeyMeta.issue_scope) &&
+    Boolean(journeyMeta.claimed_access_statement?.trim()) &&
+    journeyMeta.evidenceCount >= 1 &&
+    journeyMeta.guidanceCount >= 1;
+
+  const showWheelMap =
+    journeyMeta?.mode === "physical" &&
+    (journeyMeta?.user_focus === "wheelchair" || journeyMeta?.user_focus === "both");
 
   const handleCopy = async () => {
     try {
@@ -140,6 +189,22 @@ function OSMHelperContent() {
         </p>
       </div>
 
+      {journeyId && phase === "3" && journeyMeta && !readyForPublicContribution && (
+        <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          <strong>This journey is not ready for public contribution.</strong>
+          <p className="mt-1 text-[12px] text-amber-200/90">
+            Before generating an OSM note, ensure: issue scope is set (on the journey detail page),
+            claimed access statement is present, at least one evidence item, and at least one guidance URL.
+          </p>
+          <Link
+            href={`/journeys/${journeyId}`}
+            className="mt-2 inline-block rounded-full border-2 border-amber-400 bg-black px-3 py-1.5 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/20"
+          >
+            Open journey to complete
+          </Link>
+        </div>
+      )}
+
       <section className="space-y-3 rounded-xl border border-white/15 bg-white/[0.02] p-5 text-sm text-white/80">
         <ol className="list-decimal space-y-2 pl-5 text-[13px]">
           <li>
@@ -181,22 +246,25 @@ function OSMHelperContent() {
           <button
             type="button"
             onClick={handleCopy}
-            disabled={loading || !noPersonalDataConfirmed}
+            disabled={Boolean(loading || !noPersonalDataConfirmed || (phase === "3" && journeyId && !readyForPublicContribution))}
             className="rounded-full border-2 border-white bg-black px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Copy template
           </button>
           <a
-            href={noPersonalDataConfirmed ? osmNotesUrl : "#"}
+            href={noPersonalDataConfirmed && (!(phase === "3" && journeyId) || readyForPublicContribution) ? osmNotesUrl : "#"}
             target="_blank"
             rel="noreferrer"
-            onClick={(e) => !noPersonalDataConfirmed && e.preventDefault()}
+            onClick={(e) => {
+              if (!noPersonalDataConfirmed) e.preventDefault();
+              if (phase === "3" && journeyId && !readyForPublicContribution) e.preventDefault();
+            }}
             className={`inline-flex items-center justify-center rounded-full border-2 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] transition ${
-              noPersonalDataConfirmed
+              noPersonalDataConfirmed && (!(phase === "3" && journeyId) || readyForPublicContribution)
                 ? "border-white bg-black text-white hover:bg-white/10"
                 : "cursor-not-allowed border-white/40 bg-black/50 text-white/50 pointer-events-none"
             }`}
-            aria-disabled={!noPersonalDataConfirmed}
+            aria-disabled={!noPersonalDataConfirmed || (phase === "3" && !!journeyId && !readyForPublicContribution) ? true : undefined}
           >
             Open OSM Notes
           </a>
@@ -239,6 +307,53 @@ function OSMHelperContent() {
               {saveMessage}
             </p>
           )}
+        </section>
+      )}
+
+      {showWheelMap && (
+        <section className="space-y-3 rounded-xl border border-white/15 bg-white/[0.02] p-5 text-sm">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
+            WheelMap contribution (physical accessibility only)
+          </div>
+          <p className="text-[12px] text-white/70">
+            WheelMap allows you to contribute structured wheelchair accessibility information.
+          </p>
+          <div className="flex flex-wrap gap-3 text-[12px]">
+            {[
+              ["fully_accessible", "Fully accessible"],
+              ["partially_accessible", "Partially accessible"],
+              ["not_accessible", "Not accessible"],
+              ["unknown", "Unknown"],
+            ].map(([value, label]) => (
+              <label key={value} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="wheelmap"
+                  checked={wheelmapAccessibility === value}
+                  onChange={() => setWheelmapAccessibility(value)}
+                  className="rounded-full border-white/30"
+                />
+                <span>{label}</span>
+              </label>
+            ))}
+          </div>
+          <label className="mt-3 flex items-start gap-2 text-[12px] text-white/80">
+            <input
+              type="checkbox"
+              checked={wheelmapNoPersonalConfirmed}
+              onChange={(e) => setWheelmapNoPersonalConfirmed(e.target.checked)}
+              className="mt-[2px]"
+            />
+            <span>I confirm this submission contains no personal data.</span>
+          </label>
+          <a
+            href="https://wheelmap.org"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center rounded-full border-2 border-white bg-black px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white hover:bg-white/10"
+          >
+            Open WheelMap
+          </a>
         </section>
       )}
     </div>

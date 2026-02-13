@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Field } from "@/components/ui/Field";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
@@ -90,6 +90,9 @@ export default function WizardPage() {
   ]);
 
   // Step 4 – Outcome
+  const [linkedClaimId, setLinkedClaimId] = useState<string | null>(null);
+  const [loggedClaims, setLoggedClaims] = useState<{ id: string; source_label: string | null; source_url: string; claim_text: string }[]>([]);
+  const [claimedAccessStatement, setClaimedAccessStatement] = useState("");
   const [whatHappened, setWhatHappened] = useState("");
   const [expectedOutcome, setExpectedOutcome] = useState("");
   const [accessResult, setAccessResult] = useState<AccessResult>("");
@@ -111,6 +114,24 @@ export default function WizardPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const { data } = await supabase
+          .from("claimed_access_statements")
+          .select("id, source_label, source_url, claim_text")
+          .order("created_at", { ascending: false })
+          .limit(30);
+        if (!cancelled && data) setLoggedClaims(data as { id: string; source_label: string | null; source_url: string; claim_text: string }[]);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showPrivacyGate, setShowPrivacyGate] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
@@ -165,14 +186,6 @@ export default function WizardPage() {
         if (locationText.trim().length < 5) {
           newErrors.locationText = "Describe the location so someone else could find it.";
         }
-        const latNum = parseFloat(lat);
-        const lngNum = parseFloat(lng);
-        if (Number.isNaN(latNum) || lat.trim() === "") {
-          newErrors.lat = "Enter a valid latitude (e.g. 51.5074).";
-        }
-        if (Number.isNaN(lngNum) || lng.trim() === "") {
-          newErrors.lng = "Enter a valid longitude (e.g. -0.1278).";
-        }
       } else if (mode === "digital") {
         if (!url.startsWith("http")) {
           newErrors.url = "Use the exact page URL where the barrier occurs.";
@@ -198,6 +211,9 @@ export default function WizardPage() {
     }
 
     if (index === 4) {
+      if (claimedAccessStatement.trim().length < 10) {
+        newErrors.claimedAccessStatement = "What is claimed about access here? (min 10 characters).";
+      }
       if (whatHappened.trim().length < 20) {
         newErrors.whatHappened = "Write at least 20 characters for what happened (factual).";
       }
@@ -260,17 +276,13 @@ export default function WizardPage() {
   function getCompletionMissing(): string[] {
     const missing: string[] = [];
     if (steps.length < MIN_STEPS) missing.push("Minimum 2 steps");
+    if (claimedAccessStatement.trim().length < 10) missing.push("Claimed access statement (min 10 characters)");
     if (whatHappened.trim().length < 20) missing.push("What happened (at least 20 characters)");
     if (expectedOutcome.trim().length < 10) missing.push("Expected outcome (at least 10 characters)");
     if (!barrierType) missing.push("Barrier type selected");
     if (!whereHappened) missing.push("Where it happened selected");
     if (!status) missing.push("Status selected");
-    if (mode === "physical") {
-      const latNum = parseFloat(lat);
-      const lngNum = parseFloat(lng);
-      if (Number.isNaN(latNum) || lat.trim() === "") missing.push("Location pin (latitude) for physical mode");
-      if (Number.isNaN(lngNum) || lng.trim() === "") missing.push("Location pin (longitude) for physical mode");
-    } else if (mode === "digital") {
+    if (mode === "digital") {
       if (!url.startsWith("http")) missing.push("URL for digital mode");
     }
     if (evidenceItems.length < 1) missing.push("At least one evidence item (photo or URL)");
@@ -378,6 +390,8 @@ export default function WizardPage() {
           user_focus: userFocus || "other",
           user_focus_other: userFocus === "other" ? userFocusOther || null : null,
           journey_goal: journeyGoal,
+          claimed_access_statement: claimedAccessStatement.trim(),
+          claimed_statement_id: linkedClaimId || null,
           what_happened: whatHappened,
           expected_outcome: expectedOutcome,
           barrier_type: barrierType,
@@ -718,10 +732,10 @@ export default function WizardPage() {
                 (userFocus === "other" ? errors.userFocusOther : undefined)
               }
             >
-              <div className="flex flex-wrap gap-2 text-[11px]">
+              <div className="flex flex-col gap-2 text-[11px]">
                 {[
-                  ["wheelchair", "Wheelchair"],
-                  ["blind_vi", "Blind & VI"],
+                  ["wheelchair", "Wheelchair users"],
+                  ["blind_vi", "Blind & visually impaired users"],
                   ["both", "Both"],
                   ["other", "Other"],
                 ].map(([value, label]) => (
@@ -729,7 +743,7 @@ export default function WizardPage() {
                     key={value}
                     type="button"
                     onClick={() => setUserFocus(value as UserFocus)}
-                    className={`rounded-full border px-3 py-1 ${
+                    className={`w-full rounded-lg border px-3 py-2.5 text-left whitespace-normal leading-snug ${
                       userFocus === value
                         ? "border-white bg-white text-black"
                         : "border-white/30 bg-black text-white/80"
@@ -787,31 +801,6 @@ export default function WizardPage() {
                     placeholder="e.g., UAL Camberwell Peckham Building, Main entrance A, lift bank near reception."
                     className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
                   />
-                </Field>
-                <Field
-                  label="Location pin (latitude, longitude)"
-                  helper="Required for physical mode. Use a map or device to get coordinates (e.g. 51.5074, -0.1278)."
-                  required
-                  error={errors.lat || errors.lng}
-                >
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={lat}
-                      onChange={(e) => setLat(e.target.value)}
-                      placeholder="Lat (e.g. 51.5074)"
-                      className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
-                    />
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={lng}
-                      onChange={(e) => setLng(e.target.value)}
-                      placeholder="Lng (e.g. -0.1278)"
-                      className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
-                    />
-                  </div>
                 </Field>
               </>
             ) : (
@@ -926,6 +915,60 @@ export default function WizardPage() {
 
         {stepIndex === 4 && (
           <div className="space-y-4">
+            <Field
+              label="Link to a previously logged claim (optional)"
+              helper={loggedClaims.length > 0 ? "Choose a claim you logged in Phase 0 to pre-fill the statement below. You can still edit the text." : "No claims logged in Phase 0 yet. Log claims on the home page (Phase 0) first, or enter manually below."}
+            >
+              {loggedClaims.length > 0 ? (
+                <select
+                  value={linkedClaimId ?? ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setLinkedClaimId(val || null);
+                    if (val) {
+                      const claim = loggedClaims.find((c) => c.id === val);
+                      if (claim) {
+                        setClaimedAccessStatement(claim.claim_text);
+                        setGuidanceUrls((prev) => [claim.source_url, ...prev.slice(1)]);
+                      }
+                    } else {
+                      setGuidanceUrls((prev) => ["", ...prev.slice(1)]);
+                    }
+                  }}
+                  className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white focus:border-white/60 focus:outline-none"
+                >
+                  <option value="">No linked claim</option>
+                  {loggedClaims.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.source_label || c.source_url} — {c.claim_text.slice(0, 40)}{c.claim_text.length > 40 ? "…" : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="rounded-md border border-white/20 bg-white/5 px-3 py-2 text-[12px] text-white/70">
+                  No claims in Phase 0 yet. Go to the home page, switch to Phase 0, and use “Log a Claimed Access Statement” to add claims. Then return here to link one, or type the claim below.
+                </p>
+              )}
+            </Field>
+            <Field
+              label="What is claimed about access here?"
+              helper="What does the institution/system publicly claim about accessibility at this location or service? Example: 'This building is fully accessible.'"
+              required
+              error={errors.claimedAccessStatement}
+            >
+              <textarea
+                value={claimedAccessStatement}
+                onChange={(e) => setClaimedAccessStatement(e.target.value)}
+                rows={2}
+                maxLength={500}
+                className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
+                placeholder="e.g., This building is fully accessible."
+              />
+              <p className="mt-1 text-[10px] text-white/50">
+                {claimedAccessStatement.length}/500 · need at least 10
+              </p>
+            </Field>
+
             <Field
               label="What happened (factual)"
               helper="Describe what you observed without explaining why. Min 20 characters."
@@ -1298,7 +1341,7 @@ export default function WizardPage() {
             </h3>
             <p className="text-[11px] text-white/60">
               Link to an official policy, accessibility statement, or system
-              guidance relevant to this issue.
+              guidance relevant to this issue. Pick a link from Phase 0 below or enter a URL manually. Add more with the button.
             </p>
             <Field
               label=""
@@ -1306,15 +1349,52 @@ export default function WizardPage() {
               error={errors.guidance}
             >
               <div className="space-y-2">
+                <div>
+                  <p className="mb-1 text-[10px] uppercase tracking-[0.12em] text-white/50">
+                    Use a link from a Phase 0 claim (optional)
+                  </p>
+                  {loggedClaims.length > 0 ? (
+                    <select
+                      value={loggedClaims.find((c) => c.source_url === guidanceUrls[0])?.id ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val) {
+                          const claim = loggedClaims.find((c) => c.id === val);
+                          if (claim) updateGuidance(0, claim.source_url);
+                        } else {
+                          updateGuidance(0, "");
+                        }
+                      }}
+                      className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white focus:border-white/60 focus:outline-none"
+                    >
+                      <option value="">No link from Phase 0 — I’ll enter a URL below</option>
+                      {loggedClaims.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.source_label || c.source_url} — {c.source_url}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="rounded-md border border-white/20 bg-white/5 px-3 py-2 text-[12px] text-white/60">
+                      No Phase 0 claims yet. Log claims on the home page (Phase 0) to see links here, or enter a URL in the field below.
+                    </p>
+                  )}
+                </div>
                 {guidanceUrls.map((g, idx) => (
-                  <input
-                    key={idx}
-                    type="url"
-                    value={g}
-                    onChange={(e) => updateGuidance(idx, e.target.value)}
-                    placeholder="e.g., https://www.arts.ac.uk/accessibility"
-                    className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
-                  />
+                  <div key={idx}>
+                    {idx === 0 && (
+                      <p className="mb-1 text-[10px] uppercase tracking-[0.12em] text-white/50">
+                        {loggedClaims.length > 0 ? "Guidance URL (from dropdown above or enter here)" : "Guidance URL"}
+                      </p>
+                    )}
+                    <input
+                      type="url"
+                      value={g}
+                      onChange={(e) => updateGuidance(idx, e.target.value)}
+                      placeholder="e.g., https://www.arts.ac.uk/accessibility"
+                      className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
+                    />
+                  </div>
                 ))}
                 <button
                   type="button"

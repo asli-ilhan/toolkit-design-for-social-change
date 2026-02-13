@@ -11,6 +11,8 @@ type Journey = {
   group_id: string | null;
   mode: "physical" | "digital";
   campus_or_system: string;
+  claimed_access_statement?: string | null;
+  claimed_statement_id?: string | null;
   what_happened: string;
   barrier_type: string;
   access_result: string;
@@ -71,7 +73,7 @@ export default function FeedPage() {
         const { data, error: dbError } = await supabase
           .from("journeys")
           .select(
-            "id, journey_code, group_id, mode, campus_or_system, what_happened, barrier_type, access_result, status, lat, lng, user_focus, where_happened",
+            "id, journey_code, group_id, mode, campus_or_system, claimed_access_statement, claimed_statement_id, what_happened, barrier_type, access_result, status, lat, lng, user_focus, where_happened",
           )
           .order("created_at", { ascending: false })
           .limit(50);
@@ -107,7 +109,7 @@ export default function FeedPage() {
   }, []);
 
   useEffect(() => {
-    if (phase !== "2_categories") return;
+    if (phase !== "2") return;
     let cancelled = false;
     (async () => {
       try {
@@ -205,7 +207,7 @@ export default function FeedPage() {
           </ul>
         </div>
       )}
-      {phase === "2_categories" && (
+      {phase === "2" && (
         <div className="rounded-xl border border-white/15 bg-white/[0.03] p-4">
           <h2 className="text-sm font-semibold text-white/90">Categories & governance</h2>
           <p className="mt-1 text-[11px] text-white/60">Use the feed to spot patterns:</p>
@@ -216,7 +218,7 @@ export default function FeedPage() {
           </ul>
         </div>
       )}
-      {phase === "2_story" && (
+      {phase === "2" && (
         <div className="rounded-xl border border-white/15 bg-white/[0.03] p-4">
           <h2 className="text-sm font-semibold text-white/90">Storyboard focus</h2>
           <ul className="mt-2 list-inside list-disc space-y-0.5 text-sm text-white/80">
@@ -420,6 +422,18 @@ export default function FeedPage() {
                   <span className="rounded-full border border-white/30 px-2 py-[2px] text-white/80">
                     Status: {j.status}
                   </span>
+                  {j.claimed_statement_id && (
+                    <span className="rounded-full border border-white/40 px-2 py-[2px] text-white/90">
+                      Linked Claim
+                    </span>
+                  )}
+                  {j.claimed_access_statement &&
+                    j.claimed_access_statement.length > 20 &&
+                    j.what_happened.length > 20 && (
+                      <span className="rounded-full border border-amber-400/50 px-2 py-[2px] text-[10px] text-amber-200">
+                        Claim Mismatch Documented
+                      </span>
+                    )}
                   {(() => {
                     const key = `${j.campus_or_system}::${j.barrier_type}::${j.status}`;
                     const count = similarityMap[key] ?? 0;

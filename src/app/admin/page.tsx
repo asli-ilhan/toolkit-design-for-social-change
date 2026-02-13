@@ -3,9 +3,9 @@
 import { usePhase, type WorkshopPhase } from "@/lib/PhaseContext";
 
 const PHASES: { value: WorkshopPhase; label: string }[] = [
+  { value: "0", label: "Phase 0 — Claimed Access Scan" },
   { value: "1", label: "Phase 1 — Evidence Collection" },
-  { value: "2_categories", label: "Phase 2 — Categories & Governance" },
-  { value: "2_story", label: "Phase 2 — Storyboard & Public Expression" },
+  { value: "2", label: "Phase 2 — Categories & Storyboard" },
   { value: "3", label: "Phase 3 — Public Contribution" },
 ];
 
@@ -44,7 +44,7 @@ export default function AdminPage() {
           ))}
         </div>
         <p className="mt-2 text-[11px] text-white/50">
-          Flow: 1 → 2 Categories (approve + reallocate) → 2 Storyboard → 3 OSM.
+          Flow: 0 → 1 → 2 (Categories + Storyboard) → 3 OSM / WheelMap.
         </p>
       </div>
     </div>

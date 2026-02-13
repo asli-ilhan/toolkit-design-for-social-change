@@ -7,7 +7,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("journeys")
       .select(
-        "id, journey_code, group_id, mode, campus_or_system, user_focus, journey_goal, what_happened, expected_outcome, barrier_type, where_happened, access_result, missing_or_unclear, suggested_improvement, status, created_at",
+        "id, journey_code, group_id, mode, campus_or_system, user_focus, journey_goal, claimed_access_statement, claimed_statement_id, what_happened, expected_outcome, barrier_type, where_happened, access_result, missing_or_unclear, suggested_improvement, status, issue_scope, created_at, claimed_access_statements(source_url, user_focus)",
       )
       .order("created_at", { ascending: false });
 
@@ -23,6 +23,10 @@ export async function GET() {
       "campus_or_system",
       "user_focus",
       "journey_goal",
+      "claimed_access_statement",
+      "claimed_statement_id",
+      "claim_source_url",
+      "claim_user_focus",
       "what_happened",
       "expected_outcome",
       "barrier_type",
@@ -31,18 +35,47 @@ export async function GET() {
       "missing_or_unclear",
       "suggested_improvement",
       "status",
+      "issue_scope",
       "created_at",
     ];
 
-    const rows = (data ?? []).map((row: any) =>
-      header
-        .map((key) => {
-          const value = row[key] ?? "";
-          const escaped = String(value).replace(/"/g, '""');
+    const rows = (data ?? []).map((row: any) => {
+      const claim = row.claimed_access_statements;
+      const claimSourceUrl = claim?.source_url ?? "";
+      const claimUserFocus = claim?.user_focus ?? "";
+      const baseKeys = [
+        "id",
+        "journey_code",
+        "group_id",
+        "mode",
+        "campus_or_system",
+        "user_focus",
+        "journey_goal",
+        "claimed_access_statement",
+        "claimed_statement_id",
+      ];
+      const values = [
+        ...baseKeys.map((key) => row[key] ?? ""),
+        claimSourceUrl,
+        claimUserFocus,
+        row.what_happened ?? "",
+        row.expected_outcome ?? "",
+        row.barrier_type ?? "",
+        row.where_happened ?? "",
+        row.access_result ?? "",
+        row.missing_or_unclear ?? "",
+        row.suggested_improvement ?? "",
+        row.status ?? "",
+        row.issue_scope ?? "",
+        row.created_at ?? "",
+      ];
+      return values
+        .map((v) => {
+          const escaped = String(v).replace(/"/g, '""');
           return `"${escaped}"`;
         })
-        .join(","),
-    );
+        .join(",");
+    });
 
     const csv = [header.join(","), ...rows].join("\n");
 

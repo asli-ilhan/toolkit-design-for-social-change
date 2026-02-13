@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
+import { usePhase } from "@/lib/PhaseContext";
 
 type Journey = {
   id: string;
@@ -14,6 +15,8 @@ type Journey = {
   url: string | null;
   user_focus: string;
   journey_goal: string;
+  claimed_access_statement: string | null;
+  claimed_statement_id: string | null;
   what_happened: string;
   expected_outcome: string;
   barrier_type: string;
@@ -22,6 +25,7 @@ type Journey = {
   missing_or_unclear: string;
   suggested_improvement: string;
   status: string;
+  issue_scope: string | null;
   osm_note_url: string | null;
   created_at: string;
   created_session_id: string | null;
@@ -60,6 +64,9 @@ export default function JourneyDetailPage() {
   const [localSessionId, setLocalSessionId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [evidenceUrls, setEvidenceUrls] = useState<Record<string, string>>({});
+  const [savingScope, setSavingScope] = useState(false);
+  const [linkedClaim, setLinkedClaim] = useState<{ source_url: string; source_label: string | null; user_focus: string; claim_text: string } | null>(null);
+  const { phase } = usePhase();
 
   const isExample = id === "example-1";
   const canEdit = Boolean(journey?.created_session_id && localSessionId && journey.created_session_id === localSessionId);
@@ -82,6 +89,8 @@ export default function JourneyDetailPage() {
           url: null,
           user_focus: "wheelchair",
           journey_goal: "Reach a studio on the 2nd floor.",
+          claimed_access_statement: "This building is fully accessible with step-free routes and lift access.",
+          claimed_statement_id: null,
           what_happened:
             "Lift was out of service and the step-free alternative route was not clearly signposted.",
           expected_outcome:
@@ -94,6 +103,7 @@ export default function JourneyDetailPage() {
           suggested_improvement:
             "Publish lift outage status on a single page + QR code at lift; add consistent signage to step-free routes.",
           status: "observed",
+          issue_scope: null,
           osm_note_url: null,
           created_at: new Date().toISOString(),
           created_session_id: null,
@@ -144,6 +154,16 @@ export default function JourneyDetailPage() {
 
         if (jErr) throw jErr;
         if (!cancelled && jData) setJourney(jData as Journey);
+
+        const claimId = (jData as any)?.claimed_statement_id;
+        if (claimId) {
+          const { data: claimData } = await supabase
+            .from("claimed_access_statements")
+            .select("source_url, source_label, user_focus, claim_text")
+            .eq("id", claimId)
+            .single();
+          if (!cancelled && claimData) setLinkedClaim(claimData as { source_url: string; source_label: string | null; user_focus: string; claim_text: string });
+        } else if (!cancelled) setLinkedClaim(null);
 
         const { data: sData } = await supabase
           .from("journey_steps")
@@ -293,6 +313,15 @@ export default function JourneyDetailPage() {
             <span className="rounded-full border border-white/20 px-2 py-[2px] text-white/70">
               {journey.barrier_type} · {journey.access_result}
             </span>
+            {journey.issue_scope && (
+              <span className="rounded-full border border-amber-400/50 px-2 py-[2px] text-amber-200">
+                {journey.issue_scope === "single_location"
+                  ? "Single Location"
+                  : journey.issue_scope === "recurring_pattern"
+                  ? "Recurring Pattern"
+                  : "Unclear"}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -336,23 +365,109 @@ export default function JourneyDetailPage() {
 
       {tab === "summary" && (
         <section className="space-y-4 rounded-xl border border-white/15 bg-white/[0.02] p-5 text-sm">
+          <div className="space-y-4 rounded-lg border border-white/20 bg-black/40 p-4">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">
+                Claimed Access
+              </div>
+              {linkedClaim ? (
+                <div className="mt-1 space-y-2">
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-white/50">Source URL</p>
+                  <a href={linkedClaim.source_url} target="_blank" rel="noopener noreferrer" className="block truncate text-white/80 underline hover:text-white">
+                    {linkedClaim.source_label || linkedClaim.source_url}
+                  </a>
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-white/50">User focus</p>
+                  <p className="text-white/80">
+                    {linkedClaim.user_focus === "general" ? "General" : linkedClaim.user_focus === "wheelchair" ? "Wheelchair users" : linkedClaim.user_focus === "blind_vi" ? "Blind & visually impaired users" : linkedClaim.user_focus === "both" ? "Both" : linkedClaim.user_focus}
+                  </p>
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-white/50">Original logged claim</p>
+                  <p className="rounded border border-white/15 bg-black/30 px-2 py-1.5 text-white/90">{linkedClaim.claim_text}</p>
+                  {journey.claimed_access_statement && journey.claimed_access_statement.trim() !== linkedClaim.claim_text.trim() && (
+                    <>
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-white/50">Edited claim (in this journey)</p>
+                      <p className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-white/90">{journey.claimed_access_statement}</p>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-1 text-white/90">
+                  {journey.claimed_access_statement || "—"}
+                </p>
+              )}
+            </div>
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">
+                Experienced Access
+              </div>
+              <p className="mt-1 text-white/90">{journey.what_happened}</p>
+            </div>
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">
+                Expected Access
+              </div>
+              <p className="mt-1 text-white/90">{journey.expected_outcome || "—"}</p>
+            </div>
+          </div>
+
+          {phase === "3" && (
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.18em] text-white/50">
+                Issue scope (for public contribution)
+              </div>
+              {journey.issue_scope ? (
+                <p className="mt-1 text-white/90">
+                  {journey.issue_scope === "single_location"
+                    ? "Single Location"
+                    : journey.issue_scope === "recurring_pattern"
+                    ? "Recurring Pattern"
+                    : "Unclear"}
+                </p>
+              ) : canEdit ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(
+                    [
+                      ["single_location", "Single Location"],
+                      ["recurring_pattern", "Recurring Pattern"],
+                      ["unclear", "Unclear"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      disabled={savingScope}
+                      onClick={async () => {
+                        setSavingScope(true);
+                        try {
+                          const supabase = getSupabaseClient();
+                          const { error } = await supabase
+                            .from("journeys")
+                            .update({ issue_scope: value })
+                            .eq("id", journey.id);
+                          if (error) throw error;
+                          setJourney((j) => (j ? { ...j, issue_scope: value } : j));
+                        } catch {
+                          // ignore
+                        } finally {
+                          setSavingScope(false);
+                        }
+                      }}
+                      className="rounded-full border-2 border-white bg-black px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-white/10 disabled:opacity-50"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-1 text-white/50">Not set</p>
+              )}
+            </div>
+          )}
+
           <div>
             <div className="text-[10px] uppercase tracking-[0.18em] text-white/50">
               Journey goal
             </div>
             <p className="mt-1 text-white/90">{journey.journey_goal}</p>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-white/50">
-              What happened (factual)
-            </div>
-            <p className="mt-1 text-white/90">{journey.what_happened}</p>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-white/50">
-              Expected outcome
-            </div>
-            <p className="mt-1 text-white/90">{journey.expected_outcome}</p>
           </div>
           <div>
             <div className="text-[10px] uppercase tracking-[0.18em] text-white/50">

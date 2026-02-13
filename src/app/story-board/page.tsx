@@ -18,9 +18,38 @@ type StoryNote = {
   what_is_missing?: string | null;
   framing_for_figma?: string | null;
   extra_notes?: string | null;
+  claim_type?: string | null;
+  public_strategy?: string | null;
   created_at: string;
   created_session_id?: string | null;
 };
+
+type JourneyOption = {
+  id: string;
+  journey_code: string;
+  mode: string | null;
+  barrier_type: string | null;
+  issue_scope: string | null;
+  claimed_statement_id: string | null;
+};
+
+const CLAIM_TYPE_OPTIONS = [
+  { value: "", label: "—" },
+  { value: "spatial_access", label: "Spatial access issue" },
+  { value: "information_architecture", label: "Information architecture issue" },
+  { value: "policy_mismatch", label: "Policy mismatch" },
+  { value: "repeated_navigation_failure", label: "Repeated navigation failure" },
+  { value: "classification_failure", label: "Classification failure" },
+  { value: "other", label: "Other" },
+];
+
+const PUBLIC_STRATEGY_OPTIONS = [
+  { value: "osm_single", label: "OSM single-location note" },
+  { value: "osm_recurring", label: "OSM recurring pattern note" },
+  { value: "wheelmap", label: "WheelMap classification" },
+  { value: "informational_only", label: "Informational annotation only" },
+  { value: "not_ready", label: "Not ready for public contribution" },
+];
 
 type Identity = {
   displayName: string;
@@ -35,13 +64,15 @@ function StoryBoardContent() {
 
   const [notes, setNotes] = useState<StoryNote[]>([]);
   const [claim, setClaim] = useState("");
+  const [claimType, setClaimType] = useState("");
+  const [publicStrategy, setPublicStrategy] = useState("");
   const [supportingEvidenceIds, setSupportingEvidenceIds] = useState<string[]>([]);
   const [whatIsMissing, setWhatIsMissing] = useState("");
   const [framingForFigma, setFramingForFigma] = useState("");
   const [extraNotes, setExtraNotes] = useState("");
   const [tags, setTags] = useState("");
   const [linkedJourneyIds, setLinkedJourneyIds] = useState<string[]>([]);
-  const [availableJourneys, setAvailableJourneys] = useState<{ id: string; journey_code: string }[]>([]);
+  const [availableJourneys, setAvailableJourneys] = useState<JourneyOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -72,7 +103,7 @@ function StoryBoardContent() {
         const supabase = getSupabaseClient();
         const { data, error: dbError } = await supabase
           .from("story_board_notes")
-          .select("id, title, note, tags, linked_journey_ids, claim, supporting_evidence_ids, what_is_missing, framing_for_figma, extra_notes, created_at, created_session_id")
+          .select("id, title, note, tags, linked_journey_ids, claim, supporting_evidence_ids, what_is_missing, framing_for_figma, extra_notes, claim_type, public_strategy, created_at, created_session_id")
           .order("created_at", { ascending: false })
           .limit(20);
         if (dbError) throw dbError;
@@ -96,8 +127,7 @@ function StoryBoardContent() {
         const supabase = getSupabaseClient();
         const { count, error } = await supabase
           .from("category_suggestions")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "pending");
+          .select("*", { count: "exact", head: true });
         if (!cancelled && !error && count != null) setPendingCategoryCount(count);
       } catch {}
     }
@@ -114,11 +144,11 @@ function StoryBoardContent() {
         const supabase = getSupabaseClient();
         const { data, error: dbError } = await supabase
           .from("journeys")
-          .select("id, journey_code")
+          .select("id, journey_code, mode, barrier_type, issue_scope, claimed_statement_id")
           .order("created_at", { ascending: false })
           .limit(100);
         if (dbError) throw dbError;
-        if (!cancelled && data) setAvailableJourneys(data as { id: string; journey_code: string }[]);
+        if (!cancelled && data) setAvailableJourneys(data as JourneyOption[]);
       } catch {
         // ignore
       }
@@ -134,6 +164,10 @@ function StoryBoardContent() {
     setError(null);
     if (!claim.trim()) {
       setError("Claim is required.");
+      return;
+    }
+    if (!publicStrategy) {
+      setError("Public Expression Strategy is required.");
       return;
     }
     if (supportingEvidenceIds.length < 1) {
@@ -164,6 +198,8 @@ function StoryBoardContent() {
           title,
           note: extraNotes || claim,
           claim: claim.trim(),
+          claim_type: claimType.trim() || null,
+          public_strategy: publicStrategy,
           supporting_evidence_ids: supportingEvidenceIds,
           what_is_missing: whatIsMissing.trim(),
           framing_for_figma: framingForFigma.trim(),
@@ -171,12 +207,14 @@ function StoryBoardContent() {
           tags: tagArray,
           linked_journey_ids: supportingEvidenceIds,
         })
-        .select("id, title, note, tags, linked_journey_ids, claim, supporting_evidence_ids, what_is_missing, framing_for_figma, extra_notes, created_at, created_session_id")
+        .select("id, title, note, tags, linked_journey_ids, claim, supporting_evidence_ids, what_is_missing, framing_for_figma, extra_notes, claim_type, public_strategy, created_at, created_session_id")
         .single();
       if (dbError) throw dbError;
       if (data) {
         setNotes((prev) => [data as StoryNote, ...prev]);
         setClaim("");
+        setClaimType("");
+        setPublicStrategy("");
         setSupportingEvidenceIds([]);
         setWhatIsMissing("");
         setFramingForFigma("");
@@ -195,11 +233,11 @@ function StoryBoardContent() {
   };
 
   return (
-    <PhaseGuard allowedPhases={["2_story"]}>
+    <PhaseGuard allowedPhases={["2"]}>
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
       {pendingCategoryCount > 0 && (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          There are {pendingCategoryCount} pending category suggestion(s). Consider finalising governance before finalising storyboard.
+          Category suggestions are available. Use the Category page to view and reassign entries.
         </div>
       )}
       <div className="rounded-xl border border-white/15 bg-white/[0.03] p-5">
@@ -211,6 +249,23 @@ function StoryBoardContent() {
           The story team uses this space to write claims, link evidence
           journeys, and plan storyboard frames. Everyone else can read to see
           how evidence is being assembled.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-white/15 bg-white/[0.03] p-5">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/50 mb-3">
+          Before writing a claim
+        </div>
+        <p className="text-sm text-white/85 mb-2">
+          A claim must be defensible.
+        </p>
+        <ul className="list-disc list-inside text-sm text-white/75 space-y-1">
+          <li>Can this claim be supported by at least 3 journeys?</li>
+          <li>Is the claim about a system, not a single frustration?</li>
+          <li>Does the evidence contradict an institutional claim?</li>
+        </ul>
+        <p className="mt-3 text-[11px] text-white/60">
+          You are not describing an incident. You are articulating a pattern.
         </p>
       </div>
 
@@ -230,6 +285,30 @@ function StoryBoardContent() {
             />
           </div>
           <div className="space-y-1">
+            <label className="text-[11px] text-white/70">Claim Type (optional)</label>
+            <select
+              value={claimType}
+              onChange={(e) => setClaimType(e.target.value)}
+              className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white focus:border-white/60 focus:outline-none"
+            >
+              {CLAIM_TYPE_OPTIONS.map((o) => (
+                <option key={o.value || "none"} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[11px] text-white/70">Public Expression Strategy (required)</label>
+            <select
+              value={publicStrategy}
+              onChange={(e) => setPublicStrategy(e.target.value)}
+              className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white focus:border-white/60 focus:outline-none"
+            >
+              {PUBLIC_STRATEGY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
             <label className="text-[11px] text-white/70">Section 2: Supporting Evidence (required, min 1)</label>
             <select
               multiple
@@ -237,11 +316,27 @@ function StoryBoardContent() {
               onChange={(e) => setSupportingEvidenceIds(Array.from(e.target.selectedOptions, (o) => o.value))}
               className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white min-h-[80px] focus:border-white/60 focus:outline-none"
             >
-              {availableJourneys.map((j) => (
-                <option key={j.id} value={j.id}>{j.journey_code}</option>
-              ))}
+              {availableJourneys.map((j) => {
+                const meta = [
+                  j.mode || "—",
+                  j.barrier_type || "—",
+                  j.issue_scope ? j.issue_scope.replace("_", " ") : null,
+                  j.claimed_statement_id ? "Linked claim" : null,
+                ].filter(Boolean);
+                return (
+                  <option key={j.id} value={j.id}>
+                    {j.journey_code} · {meta.join(" · ")}
+                  </option>
+                );
+              })}
             </select>
             <p className="text-[10px] text-white/50">Hold Ctrl/Cmd to select multiple.</p>
+            <p className="text-[11px] text-white/70">
+              Selected evidence count: <strong>{supportingEvidenceIds.length}</strong>
+            </p>
+            <p className="text-[10px] text-white/50">
+              Strong claims usually require 3+ journeys.
+            </p>
           </div>
           <div className="space-y-1">
             <label className="text-[11px] text-white/70">Section 3: What is missing? (required)</label>
@@ -292,14 +387,20 @@ function StoryBoardContent() {
         <div className="space-y-3">
           {notes.map((n) => {
             const canDelete = Boolean(identity?.sessionId && n.created_session_id === identity.sessionId);
+            const evidenceCount = (n.supporting_evidence_ids ?? n.linked_journey_ids ?? []).length;
+            const isNotReady = (n.public_strategy ?? "").toLowerCase().includes("not ready") || n.public_strategy === "not_ready";
+            const readyForPublic = evidenceCount >= 3 && !isNotReady;
             return (
             <article
               key={n.id}
               className="space-y-2 rounded-lg border border-white/12 bg-black/60 p-3 text-sm"
             >
-              <div className="flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center justify-between gap-2 text-xs flex-wrap">
                 <h2 className="font-semibold text-white">{n.claim ?? n.title}</h2>
                 <div className="flex items-center gap-2">
+                  <span className={`rounded-full border px-2 py-[2px] text-[10px] font-semibold ${readyForPublic ? "border-emerald-400/60 text-emerald-200 bg-emerald-500/10" : "border-white/30 text-white/70 bg-white/5"}`}>
+                    {readyForPublic ? "Ready for public contribution" : "Draft"}
+                  </span>
                   <span className="text-[10px] text-white/50">
                     {new Date(n.created_at).toLocaleString()}
                   </span>

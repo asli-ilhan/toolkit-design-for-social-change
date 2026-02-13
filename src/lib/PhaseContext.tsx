@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 
-export type WorkshopPhase = "1" | "2_categories" | "2_story" | "3";
+export type WorkshopPhase = "0" | "1" | "2" | "3";
 
 const PhaseContext = createContext<{
   phase: WorkshopPhase;
@@ -16,20 +16,22 @@ const PhaseContext = createContext<{
   refetch: () => void;
 } | null>(null);
 
+const VALID_PHASES: WorkshopPhase[] = ["0", "1", "2", "3"];
+
 export function PhaseProvider({ children }: { children: React.ReactNode }) {
-  const [phase, setPhaseState] = useState<WorkshopPhase>("1");
+  const [phase, setPhaseState] = useState<WorkshopPhase>("0");
 
   const refetch = useCallback(async () => {
     try {
       const res = await fetch("/api/workshop-state");
       const data = await res.json();
       if (!res.ok) return;
-      const p = data?.phase ?? "1";
-      if (["1", "2_categories", "2_story", "3"].includes(p)) {
+      const p = data?.phase ?? "0";
+      if (VALID_PHASES.includes(p as WorkshopPhase)) {
         setPhaseState(p as WorkshopPhase);
       }
     } catch {
-      // Keep current phase on network/parse error; do not revert to "1"
+      // Keep current phase on network/parse error
     }
   }, []);
 
@@ -73,20 +75,20 @@ export function PhaseProvider({ children }: { children: React.ReactNode }) {
 
 export function usePhase() {
   const ctx = useContext(PhaseContext);
-  return ctx ?? { phase: "1" as WorkshopPhase, setPhase: async () => {}, refetch: () => {} };
+  return ctx ?? { phase: "0" as WorkshopPhase, setPhase: async () => {}, refetch: () => {} };
 }
 
 export function phaseBannerLabel(phase: WorkshopPhase): string {
   switch (phase) {
+    case "0":
+      return "PHASE 0 — Claimed Access Scan";
     case "1":
       return "PHASE 1 — Evidence Collection";
-    case "2_categories":
-      return "PHASE 2 — Categories & Governance";
-    case "2_story":
-      return "PHASE 2 — Storyboard & Public Expression";
+    case "2":
+      return "PHASE 2 — Categories & Storyboard";
     case "3":
       return "PHASE 3 — Public Contribution";
     default:
-      return "PHASE 1 — Evidence Collection";
+      return "PHASE 0 — Claimed Access Scan";
   }
 }

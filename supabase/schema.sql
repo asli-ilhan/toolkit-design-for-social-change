@@ -27,6 +27,7 @@ create table if not exists public.journeys (
   user_focus text,
   user_focus_other text,
   journey_goal text,
+  claimed_access_statement text,
   what_happened text not null,
   expected_outcome text,
   barrier_type text not null,
@@ -36,6 +37,7 @@ create table if not exists public.journeys (
   missing_or_unclear text,
   suggested_improvement text,
   status text not null,
+  issue_scope text check (issue_scope is null or issue_scope in ('single_location','recurring_pattern','unclear')),
   lat double precision,
   lng double precision,
   created_at timestamptz default now()
@@ -77,18 +79,52 @@ create table if not exists public.story_board_notes (
   what_is_missing text,
   framing_for_figma text,
   extra_notes text,
+  claim_type text,
+  public_strategy text not null default 'Not ready for public contribution',
   created_at timestamptz default now()
 );
 
--- Workshop phase (single row; lecturer changes via admin)
+-- Workshop phase (single row; lecturer changes via admin). Values: 0, 1, 2, 3 only.
 create table if not exists public.workshop_state (
   id uuid primary key default gen_random_uuid(),
-  current_phase text not null default '1' check (current_phase in ('1', '2_categories', '2_story', '3')),
+  current_phase text not null default '0' check (current_phase in ('0', '1', '2', '3')),
   updated_at timestamptz default now()
 );
 insert into public.workshop_state (id, current_phase)
-select gen_random_uuid(), '1'
+select gen_random_uuid(), '0'
 where not exists (select 1 from public.workshop_state limit 1);
+
+-- Phase 0: URLs students found (optional). created_group_id can reference groups(id).
+create table if not exists public.claimed_source_urls (
+  id uuid primary key default gen_random_uuid(),
+  created_session_id text,
+  created_name text,
+  created_group_id uuid references public.groups(id) on delete set null,
+  url text not null,
+  label text,
+  created_at timestamptz default now()
+);
+alter table public.claimed_source_urls enable row level security;
+create policy "Allow anon read claimed_source_urls" on public.claimed_source_urls for select to anon using (true);
+create policy "Allow anon insert claimed_source_urls" on public.claimed_source_urls for insert to anon with check (true);
+create policy "Allow anon delete claimed_source_urls" on public.claimed_source_urls for delete to anon using (true);
+
+-- Phase 0: logged claimed access statements (source URL, user focus, claim text). Session attribution like journeys.
+create table if not exists public.claimed_access_statements (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz default now(),
+  created_name text,
+  created_group_id uuid references public.groups(id) on delete set null,
+  created_session_id text,
+  source_url text not null,
+  source_label text,
+  user_focus text,
+  claim_text text not null
+);
+alter table public.claimed_access_statements enable row level security;
+create policy "Allow anon read claimed_access_statements" on public.claimed_access_statements for select to anon using (true);
+create policy "Allow anon insert claimed_access_statements" on public.claimed_access_statements for insert to anon with check (true);
+create policy "Allow anon delete claimed_access_statements" on public.claimed_access_statements for delete to anon using (true);
 
 -- Category / governance suggestions
 create table if not exists public.category_suggestions (
@@ -97,10 +133,9 @@ create table if not exists public.category_suggestions (
   field_name text not null,
   suggestion text not null,
   rationale text,
+  observed_pattern text,
   suggested_name text,
   suggested_session_id text,
-  status text default 'pending' check (status in ('pending', 'approved', 'rejected')),
-  approved_at timestamptz,
   created_at timestamptz default now()
 );
 
@@ -156,9 +191,24 @@ create policy "Allow anon delete category_suggestions"
 create policy "Allow anon update category_suggestions"
   on public.category_suggestions for update to anon using (true) with check (true);
 
--- Migration: category_suggestions approval fields (run on existing DBs)
-alter table public.category_suggestions add column if not exists status text default 'pending';
-alter table public.category_suggestions add column if not exists approved_at timestamptz;
+-- Migration: category_suggestions observed_pattern (run on existing DBs)
+alter table public.category_suggestions add column if not exists observed_pattern text;
+
+-- Migration: remove lecturer approval (run on existing DBs after deploying code that no longer uses status/approved_at)
+alter table public.category_suggestions drop column if exists status;
+alter table public.category_suggestions drop column if exists approved_at;
+
+-- Migration: claimed access + issue scope (run on existing DBs)
+alter table public.journeys add column if not exists claimed_access_statement text;
+alter table public.journeys add column if not exists issue_scope text;
+
+-- Migration: link journey to Phase 0 logged claim (run after claimed_access_statements exists)
+alter table public.journeys add column if not exists claimed_statement_id uuid references public.claimed_access_statements(id) on delete set null;
+
+-- Migration: Phase 0 + merge Phase 2 (run on existing DBs). Then update check: drop old check and add new.
+-- update public.workshop_state set current_phase = '2' where current_phase in ('2_categories', '2_story');
+-- alter table public.workshop_state drop constraint if exists workshop_state_current_phase_check;
+-- alter table public.workshop_state add constraint workshop_state_current_phase_check check (current_phase in ('0','1','2','3'));
 
 -- Migration: add structured story board columns if missing (run on existing DBs)
 alter table public.story_board_notes add column if not exists claim text;
@@ -166,6 +216,8 @@ alter table public.story_board_notes add column if not exists supporting_evidenc
 alter table public.story_board_notes add column if not exists what_is_missing text;
 alter table public.story_board_notes add column if not exists framing_for_figma text;
 alter table public.story_board_notes add column if not exists extra_notes text;
+alter table public.story_board_notes add column if not exists claim_type text;
+alter table public.story_board_notes add column if not exists public_strategy text not null default 'Not ready for public contribution';
 
 -- Seed groups when table is empty (phase-neutral names; workshop flow is phase-based)
 insert into public.groups (name, role_key, role_title)

@@ -12,12 +12,12 @@ export async function GET() {
       .limit(1)
       .maybeSingle();
     if (error) throw error;
-    const phase = (data?.current_phase as string) ?? "1";
+    const phase = (data?.current_phase as string) ?? "0";
     return NextResponse.json({ phase });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[workshop-state GET]", message);
-    return NextResponse.json({ phase: "1" });
+    return NextResponse.json({ phase: "0" });
   }
 }
 
@@ -25,7 +25,7 @@ export async function PATCH(request: Request) {
   try {
     const body = await request.json();
     const phase = body?.phase as string;
-    if (!["1", "2_categories", "2_story", "3"].includes(phase)) {
+    if (!["0", "1", "2", "3"].includes(phase)) {
       return NextResponse.json({ error: "Invalid phase" }, { status: 400 });
     }
     const supabase = getSupabaseClient();

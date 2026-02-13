@@ -25,6 +25,7 @@ function CategoryGovernanceContent() {
       : "",
   );
   const [rationale, setRationale] = useState("");
+  const [observedPattern, setObservedPattern] = useState("");
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<{
@@ -32,10 +33,14 @@ function CategoryGovernanceContent() {
     field_name: string;
     suggestion: string;
     rationale: string | null;
+    observed_pattern: string | null;
     suggested_session_id: string | null;
-    status: string;
-    approved_at: string | null;
   }[]>([]);
+  const [summary, setSummary] = useState<{
+    totalJourneys: number;
+    topBarrierType: string;
+    otherCount: number;
+  } | null>(null);
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [reassignField, setReassignField] = useState<string>("barrier_type");
   const [reassignOld, setReassignOld] = useState("");
@@ -62,7 +67,7 @@ function CategoryGovernanceContent() {
         const supabase = getSupabaseClient();
         const { data, error: dbError } = await supabase
           .from("category_suggestions")
-          .select("id, field_name, suggestion, rationale, suggested_session_id, status, approved_at")
+          .select("id, field_name, suggestion, rationale, observed_pattern, suggested_session_id")
           .order("created_at", { ascending: false })
           .limit(100);
         if (dbError) throw dbError;
@@ -76,6 +81,37 @@ function CategoryGovernanceContent() {
       cancelled = true;
     };
   }, [saved]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSummary() {
+      try {
+        const supabase = getSupabaseClient();
+        const { data, error: dbError } = await supabase
+          .from("journeys")
+          .select("barrier_type, where_happened, user_focus")
+          .limit(500);
+        if (dbError) throw dbError;
+        if (cancelled || !data) return;
+        const total = data.length;
+        const otherCount = (data as { barrier_type?: string; where_happened?: string; user_focus?: string }[]).filter(
+          (j) => j.barrier_type === "other" || j.where_happened === "other" || j.user_focus === "other"
+        ).length;
+        const barrierCounts: Record<string, number> = {};
+        (data as { barrier_type?: string }[]).forEach((j) => {
+          const bt = j.barrier_type || "unknown";
+          barrierCounts[bt] = (barrierCounts[bt] ?? 0) + 1;
+        });
+        const topBarrierType =
+          Object.entries(barrierCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
+        setSummary({ totalJourneys: total, topBarrierType, otherCount });
+      } catch {
+        // ignore
+      }
+    }
+    loadSummary();
+    return () => { cancelled = true; };
+  }, []);
 
   const BULK_FIELDS = [
     { key: "barrier_type", label: "Barrier type" },
@@ -156,6 +192,9 @@ function CategoryGovernanceContent() {
       setError("Field name and suggestion are required.");
       return;
     }
+    if (!confirm("This will immediately affect the shared dataset. Continue?")) {
+      return;
+    }
     try {
       const supabase = getSupabaseClient();
       const { error: insertError } = await supabase
@@ -165,6 +204,7 @@ function CategoryGovernanceContent() {
           field_name: fieldName.trim(),
           suggestion: suggestion.trim(),
           rationale: rationale.trim() || null,
+          observed_pattern: observedPattern.trim() || null,
           suggested_name: identity?.displayName ?? null,
           suggested_session_id: identity?.sessionId ?? null,
         });
@@ -172,6 +212,7 @@ function CategoryGovernanceContent() {
       setFieldName(flaggedJourneyId ? "flag_inconsistent" : "");
       setSuggestion("");
       setRationale("");
+      setObservedPattern("");
       setSaved(true);
     } catch (err: any) {
       setError(err?.message ?? "Could not save suggestion.");
@@ -179,8 +220,34 @@ function CategoryGovernanceContent() {
   };
 
   return (
-    <PhaseGuard allowedPhases={["2_categories"]}>
+    <PhaseGuard allowedPhases={["2"]}>
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+      {summary !== null && (
+        <div className="rounded-xl border border-white/15 bg-white/[0.03] p-3 flex flex-wrap items-center gap-4 text-[11px] text-white/80">
+          <span><strong className="text-white/90">Total journeys:</strong> {summary.totalJourneys}</span>
+          <span><strong className="text-white/90">Most frequent barrier type:</strong> {summary.topBarrierType}</span>
+          <span><strong className="text-white/90">Entries using &quot;Other&quot;:</strong> {summary.otherCount}</span>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-white/15 bg-white/[0.03] p-5">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/50 mb-3">
+          Before suggesting a category
+        </div>
+        <p className="text-sm text-white/85 mb-2">
+          Look at the feed carefully.
+        </p>
+        <ul className="list-disc list-inside text-sm text-white/75 space-y-1">
+          <li>Which barrier types appear repeatedly?</li>
+          <li>Which entries fall into &quot;Other&quot;?</li>
+          <li>Are similar issues described using different words?</li>
+          <li>Does the schema shape what can be said?</li>
+        </ul>
+        <p className="mt-3 text-[11px] text-white/60">
+          You are not adding labels. You are reshaping the dataset.
+        </p>
+      </div>
+
       <div className="rounded-xl border border-white/15 bg-white/[0.03] p-5">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
           Category / Governance
@@ -228,6 +295,16 @@ function CategoryGovernanceContent() {
             className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
           />
         </div>
+        <div className="space-y-1">
+          <label className="text-[11px] text-white/70">Observed Pattern (optional)</label>
+          <textarea
+            value={observedPattern}
+            onChange={(e) => setObservedPattern(e.target.value)}
+            rows={2}
+            placeholder="e.g. 5 entries describe “signage confusion” but barrier_type lacks this category."
+            className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
+          />
+        </div>
         {error && (
           <p className="rounded border border-red-500/60 bg-red-500/10 px-3 py-2 text-[11px] text-red-100">
             {error}
@@ -246,8 +323,12 @@ function CategoryGovernanceContent() {
 
       <section className="rounded-xl border border-white/15 bg-white/[0.02] p-5">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
-          Recent suggestions
+          Category Suggestions
         </div>
+        <p className="mt-1 text-[11px] text-white/50">
+          All suggestions become immediately available.
+          Use responsibly — schema changes affect all entries.
+        </p>
         {suggestions.length === 0 ? (
           <p className="mt-2 text-sm text-white/60">
             No category suggestions yet. Add one above to improve the taxonomy.
@@ -261,14 +342,23 @@ function CategoryGovernanceContent() {
                 key={s.id}
                 className="flex items-start justify-between gap-2 rounded-lg border border-white/12 bg-black/40 p-3"
               >
-                <div>
-                  <span className="font-mono text-[11px] text-white/70">
-                    {s.field_name}
-                  </span>
+                <div className="min-w-0 flex-1">
+                  <span className="font-mono text-[11px] text-white/70">{s.field_name}</span>
                   <p className="mt-1 text-white/90">{s.suggestion}</p>
                   {s.rationale && (
                     <p className="mt-1 text-[11px] text-white/60">{s.rationale}</p>
                   )}
+                  {s.observed_pattern && (
+                    <p className="mt-1 text-[11px] text-white/50 italic">{s.observed_pattern}</p>
+                  )}
+                  <a
+                    href="/feed"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-block text-[10px] text-white/60 underline hover:text-white/80"
+                  >
+                    Preview affected entries
+                  </a>
                 </div>
                 {canDelete && (
                   <button
@@ -295,122 +385,13 @@ function CategoryGovernanceContent() {
         )}
       </section>
 
-      <section className="rounded-xl border border-white/15 bg-white/[0.02] p-5 space-y-6">
-        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
-          Suggestions (Lecturer: approve or reject)
-        </div>
-        {["pending", "approved", "rejected"].map((status) => {
-          const list = suggestions.filter((s) => (s.status || "pending") === status);
-          const title =
-            status === "pending"
-              ? "Pending"
-              : status === "approved"
-              ? "Approved"
-              : "Rejected";
-          return (
-            <div key={status}>
-              <h3 className="mb-2 text-sm font-semibold text-white/90">{title}</h3>
-              {list.length === 0 ? (
-                <p className="text-[11px] text-white/50">None</p>
-              ) : (
-                <ul className="space-y-2 text-sm">
-                  {list.map((s) => {
-                    const canDelete = Boolean(identity?.sessionId && s.suggested_session_id === identity.sessionId);
-                    return (
-                      <li
-                        key={s.id}
-                        className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-white/12 bg-black/40 p-3"
-                      >
-                        <div>
-                          <span className="font-mono text-[11px] text-white/70">{s.field_name}</span>
-                          <p className="mt-1 text-white/90">{s.suggestion}</p>
-                          {s.rationale && (
-                            <p className="mt-1 text-[11px] text-white/60">{s.rationale}</p>
-                          )}
-                          {s.approved_at && status === "approved" && (
-                            <p className="mt-1 text-[10px] text-white/50">
-                              Approved {new Date(s.approved_at).toLocaleString()}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex shrink-0 gap-1">
-                          {(s.status || "pending") === "pending" && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  try {
-                                    const supabase = getSupabaseClient();
-                                    await supabase
-                                      .from("category_suggestions")
-                                      .update({ status: "approved", approved_at: new Date().toISOString() })
-                                      .eq("id", s.id);
-                                    setSuggestions((prev) =>
-                                      prev.map((x) =>
-                                        x.id === s.id
-                                          ? { ...x, status: "approved", approved_at: new Date().toISOString() }
-                                          : x,
-                                      ),
-                                    );
-                                  } catch {}
-                                }}
-                                className="rounded-full border-2 border-white bg-black px-2 py-0.5 text-[10px] font-semibold text-emerald-200 hover:bg-white/10"
-                              >
-                                Approve
-                              </button>
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  try {
-                                    const supabase = getSupabaseClient();
-                                    await supabase
-                                      .from("category_suggestions")
-                                      .update({ status: "rejected" })
-                                      .eq("id", s.id);
-                                    setSuggestions((prev) =>
-                                      prev.map((x) => (x.id === s.id ? { ...x, status: "rejected" } : x)),
-                                    );
-                                  } catch {}
-                                }}
-                                className="rounded-full border-2 border-white bg-black px-2 py-0.5 text-[10px] font-semibold text-red-200 hover:bg-white/10"
-                              >
-                                Reject
-                              </button>
-                            </>
-                          )}
-                          {canDelete && (s.status || "pending") !== "approved" && (
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                if (!confirm("Delete this suggestion?")) return;
-                                try {
-                                  const supabase = getSupabaseClient();
-                                  await supabase.from("category_suggestions").delete().eq("id", s.id);
-                                  setSuggestions((prev) => prev.filter((x) => x.id !== s.id));
-                                } catch {}
-                              }}
-                              className="rounded-full border-2 border-white bg-black px-2 py-0.5 text-[10px] font-semibold text-red-200 hover:bg-white/10"
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          );
-        })}
-      </section>
-
       <section className="rounded-xl border border-white/15 bg-white/[0.02] p-5 space-y-4">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
           Bulk Reassign Tool
         </div>
-        <p className="text-[11px] text-white/70">
-          After approving a new category or merge, reassign affected entries to the new value.
+        <p className="text-sm text-white/85">
+          When adding or refining a category,
+          reassign affected entries to maintain dataset consistency.
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
