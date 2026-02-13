@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { usePhase, type WorkshopPhase } from "@/lib/PhaseContext";
 
@@ -126,6 +127,9 @@ export default function Home() {
   }, [identity]);
 
   const { phase, refetch } = usePhase();
+  const searchParams = useSearchParams();
+  const accessDeniedMessage = searchParams.get("accessDenied") === "1";
+  const exportDeniedMessage = searchParams.get("exportDenied") === "1";
   const roleTitle = groupConfig?.role_title ?? null;
 
   useEffect(() => {
@@ -281,6 +285,16 @@ Then:
 
   return (
     <div className="flex flex-1 flex-col gap-6">
+      {exportDeniedMessage && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          Export becomes available in later phases.
+        </div>
+      )}
+      {accessDeniedMessage && !exportDeniedMessage && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          This module is not available for your group in the current phase.
+        </div>
+      )}
       <div className="flex flex-col gap-3 rounded-xl border border-white/15 bg-white/[0.03] p-5">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
           Home · Week 6

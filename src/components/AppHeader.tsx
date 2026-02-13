@@ -1,26 +1,55 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePhase, type WorkshopPhase } from "@/lib/PhaseContext";
+import { usePhase } from "@/lib/PhaseContext";
+import {
+  getGroupNumber,
+  getRouteAccess,
+  getNavTooltip,
+  PHASE_LABELS,
+  type RouteId,
+} from "@/lib/accessControl";
+
+const NAV_ITEMS: { href: string; label: string; route: RouteId }[] = [
+  { href: "/wizard", label: "Log", route: "wizard" },
+  { href: "/feed", label: "Feed", route: "feed" },
+  { href: "/map", label: "Map", route: "map" },
+  { href: "/story-board", label: "Story Board", route: "storyboard" },
+  { href: "/category", label: "Category", route: "category" },
+  { href: "/wheelmap-helper", label: "WheelMap", route: "wheelmap" },
+  { href: "/osm-helper", label: "OSM", route: "osm" },
+  { href: "/export", label: "Export", route: "export" },
+];
 
 function NavLink({
   href,
   label,
-  disabled,
+  access,
+  tooltip,
 }: {
   href: string;
   label: string;
-  disabled?: boolean;
+  access: "full" | "readonly" | "none";
+  tooltip: string;
 }) {
-  if (disabled) {
+  if (access === "none") {
     return (
-      <span className="cursor-not-allowed text-white/40" title="Unavailable in this phase">
+      <span
+        className="cursor-not-allowed text-white/40"
+        title={tooltip || "This module becomes available in a later phase."}
+      >
         {label}
       </span>
     );
   }
+  const readOnlyTip = access === "readonly" ? " (read-only for your group in this phase)" : "";
   return (
-    <Link href={href} className="text-white/60 hover:text-white">
+    <Link
+      href={href}
+      className={access === "readonly" ? "text-white/50 hover:text-white/70" : "text-white/60 hover:text-white"}
+      title={tooltip ? tooltip + readOnlyTip : readOnlyTip || undefined}
+    >
       {label}
     </Link>
   );
@@ -28,11 +57,11 @@ function NavLink({
 
 export function AppHeader() {
   const { phase } = usePhase();
+  const [groupNumber, setGroupNumber] = useState<1 | 2 | 3 | 4 | null>(null);
 
-  const categoryDisabled = phase === "0" || phase === "1" || phase === "3";
-  const storyBoardDisabled = phase === "0" || phase === "1" || phase === "3";
-  const osmDisabled = phase === "0" || phase === "1" || phase === "2";
-  const wheelMapDisabled = phase === "0" || phase === "1" || phase === "2";
+  useEffect(() => {
+    setGroupNumber(getGroupNumber());
+  }, []);
 
   return (
     <header className="border-b border-white/10 bg-black/80 px-4 py-3 backdrop-blur-sm">
@@ -46,14 +75,19 @@ export function AppHeader() {
           </span>
         </Link>
         <nav className="hidden items-center gap-4 text-xs sm:flex">
-          <NavLink href="/wizard" label="Log" />
-          <NavLink href="/feed" label="Feed" />
-          <NavLink href="/map" label="Map" />
-          <NavLink href="/story-board" label="Story Board" disabled={storyBoardDisabled} />
-          <NavLink href="/category" label="Category" disabled={categoryDisabled} />
-          <NavLink href="/wheelmap-helper" label="WheelMap" disabled={wheelMapDisabled} />
-          <NavLink href="/osm-helper" label="OSM" disabled={osmDisabled} />
-          <NavLink href="/export" label="Export" />
+          {NAV_ITEMS.map(({ href, label, route }) => {
+            const access = getRouteAccess(phase, groupNumber, route);
+            const tooltip = getNavTooltip(route, phase, groupNumber, PHASE_LABELS);
+            return (
+              <NavLink
+                key={route}
+                href={href}
+                label={label}
+                access={access}
+                tooltip={tooltip}
+              />
+            );
+          })}
         </nav>
       </div>
     </header>

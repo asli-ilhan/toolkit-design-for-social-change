@@ -90,7 +90,7 @@ export default function JourneyDetailPage() {
           user_focus: "wheelchair",
           journey_goal: "Reach a studio on the 2nd floor.",
           claimed_access_statement: "This building is fully accessible with step-free routes and lift access.",
-          claimed_statement_id: null,
+          claimed_statement_id: "example-claim",
           what_happened:
             "Lift was out of service and the step-free alternative route was not clearly signposted.",
           expected_outcome:
@@ -103,10 +103,16 @@ export default function JourneyDetailPage() {
           suggested_improvement:
             "Publish lift outage status on a single page + QR code at lift; add consistent signage to step-free routes.",
           status: "observed",
-          issue_scope: null,
+          issue_scope: "recurring_pattern",
           osm_note_url: null,
           created_at: new Date().toISOString(),
           created_session_id: null,
+        });
+        setLinkedClaim({
+          source_url: "https://www.arts.ac.uk/accessibility-statement",
+          source_label: null,
+          user_focus: "wheelchair",
+          claim_text: "This building is fully accessible with step-free routes and lift access.",
         });
         setSteps([
           {

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { usePhase } from "@/lib/PhaseContext";
+import { PhaseGroupGuard } from "@/components/PhaseGroupGuard";
 
 type Journey = {
   id: string;
@@ -21,6 +22,7 @@ type Journey = {
   lng: number | null;
   user_focus?: string | null;
   where_happened?: string | null;
+  issue_scope?: string | null;
 };
 
 type FilterState = {
@@ -45,6 +47,7 @@ const SAMPLE_JOURNEY: Journey = {
   status: "observed",
   lat: null,
   lng: null,
+  issue_scope: "recurring_pattern",
 };
 
 export default function FeedPage() {
@@ -178,6 +181,7 @@ export default function FeedPage() {
   })();
 
   return (
+    <PhaseGroupGuard route="feed">
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
       <div className="rounded-xl border border-white/15 bg-white/[0.03] p-5">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
@@ -520,6 +524,7 @@ export default function FeedPage() {
         )}
       </section>
     </div>
+    </PhaseGroupGuard>
   );
 }
 

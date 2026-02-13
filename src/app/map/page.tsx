@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { PhaseGroupGuard } from "@/components/PhaseGroupGuard";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
 type JourneyRow = {
@@ -89,6 +90,7 @@ export default function MapPage() {
   }, [journeys]);
 
   return (
+    <PhaseGroupGuard route="map">
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
       <div className="rounded-xl border border-white/15 bg-white/[0.03] p-5">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
@@ -166,5 +168,6 @@ export default function MapPage() {
         </section>
       )}
     </div>
+    </PhaseGroupGuard>
   );
 }

@@ -15,6 +15,35 @@ export default function ExampleJourneyPage() {
       </div>
 
       <section className="space-y-3 rounded-xl border border-white/15 bg-white/[0.02] p-5 text-sm">
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
+          Claimed Access
+        </div>
+        <div className="space-y-2 text-sm text-white/80">
+          <div>
+            <div className="font-semibold text-white/90">Source URL</div>
+            <a
+              href="https://www.arts.ac.uk/accessibility-statement"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white/80 underline hover:text-white"
+            >
+              https://www.arts.ac.uk/accessibility-statement
+            </a>
+          </div>
+          <div>
+            <div className="font-semibold text-white/90">User focus</div>
+            <p>Wheelchair users</p>
+          </div>
+          <div>
+            <div className="font-semibold text-white/90">Claim text</div>
+            <p className="rounded border border-white/15 bg-black/30 px-2 py-1.5 text-white/90">
+              This building is fully accessible with step-free routes and lift access.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-white/15 bg-white/[0.02] p-5 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="font-mono text-[11px] text-white/80">
             Journey code: UAL-W6-G3-001
@@ -109,6 +138,12 @@ export default function ExampleJourneyPage() {
               information.
             </p>
           </div>
+          <div>
+            <div className="font-semibold">Claimed access statement</div>
+            <p className="text-white/80">
+              This building is fully accessible with step-free routes and lift access.
+            </p>
+          </div>
           <div className="flex flex-wrap gap-1 text-[10px]">
             <span className="rounded-full border border-white/30 px-2 py-[2px] text-white/80">
               Barrier: Mixed (Physical + Information)
@@ -143,6 +178,22 @@ export default function ExampleJourneyPage() {
               Publish lift outage status on a single page + QR code at lift; add
               consistent signage to step-free routes.
             </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-2 rounded-xl border border-white/15 bg-white/[0.02] p-5 text-sm">
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
+          Issue scope & public expression
+        </div>
+        <div className="space-y-2 text-white/80">
+          <div>
+            <div className="font-semibold">Issue scope</div>
+            <p>Recurring pattern</p>
+          </div>
+          <div>
+            <div className="font-semibold">Public expression strategy</div>
+            <p>WheelMap classification + OSM recurring pattern note</p>
           </div>
         </div>
       </section>

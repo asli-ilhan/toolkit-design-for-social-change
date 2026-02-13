@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Field } from "@/components/ui/Field";
+import { PhaseGroupGuard } from "@/components/PhaseGroupGuard";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
 type Mode = "physical" | "digital" | "";
@@ -597,6 +598,7 @@ export default function WizardPage() {
   };
 
   return (
+    <PhaseGroupGuard route="wizard">
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
       <div className="rounded-xl border border-white/15 bg-white/[0.03] p-5">
         <div className="flex items-center justify-between gap-4">
@@ -1531,6 +1533,7 @@ export default function WizardPage() {
         )}
       </form>
     </div>
+    </PhaseGroupGuard>
   );
 }
 

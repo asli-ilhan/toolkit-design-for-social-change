@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
-import { PhaseGuard } from "@/components/PhaseGuard";
+import { PhaseGroupGuard } from "@/components/PhaseGroupGuard";
 import { usePhase } from "@/lib/PhaseContext";
 import Link from "next/link";
 
@@ -173,7 +173,7 @@ function OSMHelperContent() {
   };
 
   return (
-    <PhaseGuard allowedPhases={["3"]}>
+    <PhaseGroupGuard route="osm">
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
       <div className="rounded-xl border border-white/15 bg-white/[0.03] p-5">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
@@ -357,7 +357,7 @@ function OSMHelperContent() {
         </section>
       )}
     </div>
-    </PhaseGuard>
+    </PhaseGroupGuard>
   );
 }
 

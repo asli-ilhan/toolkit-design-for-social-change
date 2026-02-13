@@ -4,8 +4,9 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabaseClient";
-import { PhaseGuard } from "@/components/PhaseGuard";
+import { PhaseGroupGuard } from "@/components/PhaseGroupGuard";
 import { usePhase } from "@/lib/PhaseContext";
+import { getGroupNumber, getRouteAccess } from "@/lib/accessControl";
 
 type StoryNote = {
   id: string;
@@ -77,7 +78,12 @@ function StoryBoardContent() {
   const [saving, setSaving] = useState(false);
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [pendingCategoryCount, setPendingCategoryCount] = useState<number>(0);
+  const [groupNumber, setGroupNumber] = useState<1 | 2 | 3 | 4 | null>(null);
   const { phase } = usePhase();
+
+  useEffect(() => {
+    setGroupNumber(getGroupNumber());
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -232,9 +238,17 @@ function StoryBoardContent() {
     }
   };
 
+  const storyboardAccess = getRouteAccess(phase, groupNumber, "storyboard");
+  const readOnly = storyboardAccess === "readonly";
+
   return (
-    <PhaseGuard allowedPhases={["2"]}>
+    <PhaseGroupGuard route="storyboard">
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
+      {readOnly && (
+        <p className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-[11px] text-white/70">
+          View only — creating story notes is available for Groups 1 & 2 in Phase 2.
+        </p>
+      )}
       {pendingCategoryCount > 0 && (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
           Category suggestions are available. Use the Category page to view and reassign entries.
@@ -269,6 +283,7 @@ function StoryBoardContent() {
         </p>
       </div>
 
+      {!readOnly && (
       <section className="rounded-xl border border-white/15 bg-white/[0.02] p-5 space-y-4">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
           Create story note
@@ -368,6 +383,7 @@ function StoryBoardContent() {
           </button>
         </form>
       </section>
+      )}
 
       <section className="rounded-xl border border-white/15 bg-white/[0.02] p-5 space-y-3">
         <div className="flex items-center justify-between gap-3">
@@ -466,7 +482,7 @@ function StoryBoardContent() {
         </div>
       </section>
     </div>
-    </PhaseGuard>
+    </PhaseGroupGuard>
   );
 }
 

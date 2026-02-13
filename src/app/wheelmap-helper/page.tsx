@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PhaseGuard } from "@/components/PhaseGuard";
+import { PhaseGroupGuard } from "@/components/PhaseGroupGuard";
 
 const WHEELMAP_URL = "https://wheelmap.org";
 
@@ -11,7 +11,7 @@ export default function WheelMapHelperPage() {
   const [noPersonalDataConfirmed, setNoPersonalDataConfirmed] = useState(false);
 
   return (
-    <PhaseGuard allowedPhases={["3"]}>
+    <PhaseGroupGuard route="wheelmap">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
         <div className="rounded-xl border border-white/15 bg-white/[0.03] p-5">
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
@@ -81,6 +81,6 @@ export default function WheelMapHelperPage() {
           ← Back to Home
         </Link>
       </div>
-    </PhaseGuard>
+    </PhaseGroupGuard>
   );
 }
