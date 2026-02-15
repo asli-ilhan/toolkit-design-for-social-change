@@ -16,7 +16,7 @@ export type RouteId =
   | "phase0links"
   | "journey";
 
-/** Group number 1–4 from identity. Groups 1,2 = Storyboard + Map; 3,4 = Category + OSM. */
+/** Group number 1–4 from identity (for display only; access control is phase-only). */
 export function getGroupNumber(): 1 | 2 | 3 | 4 | null {
   if (typeof window === "undefined") return null;
   try {
@@ -36,80 +36,55 @@ export type AccessMode = "full" | "readonly" | "none";
 
 /**
  * Returns whether the user can access the route and in what mode.
+ * Access is phase-only; group is not used for gating.
  * - full: full access (submit, edit, use tools)
  * - readonly: can view only
  * - none: cannot access (redirect)
  */
 export function getRouteAccess(
   phase: WorkshopPhase,
-  groupNumber: 1 | 2 | 3 | 4 | null,
+  _groupNumber: 1 | 2 | 3 | 4 | null,
   route: RouteId
 ): AccessMode {
   // Phase 0
   if (phase === "0") {
     if (route === "home" || route === "start" || route === "feed" || route === "phase0links") return "full";
-    return "none"; // export disabled in phase 0
+    return "none";
   }
 
   // Phase 1
   if (phase === "1") {
-    if (route === "home" || route === "start" || route === "feed" || route === "wizard") return "full";
-    if (route === "journey") return "full";
-    return "none"; // export disabled in phase 1
+    if (route === "home" || route === "start" || route === "feed" || route === "wizard" || route === "journey") return "full";
+    return "none";
   }
 
   // Phase 2
   if (phase === "2") {
     if (route === "home" || route === "start" || route === "feed" || route === "export" || route === "journey") return "full";
-    if (route === "category") {
-      if (groupNumber === 3 || groupNumber === 4) return "full";
-      if (groupNumber === 1 || groupNumber === 2) return "readonly";
-      return "none";
-    }
-    if (route === "storyboard") {
-      if (groupNumber === 1 || groupNumber === 2) return "full";
-      if (groupNumber === 3 || groupNumber === 4) return "readonly";
-      return "none";
-    }
-    if (route === "map") {
-      if (groupNumber === 1 || groupNumber === 2) return "full";
-      return "none";
-    }
-    return "none"; // osm, wheelmap locked
+    if (route === "category" || route === "storyboard" || route === "map") return "full";
+    return "none";
   }
 
   // Phase 3
   if (phase === "3") {
     if (route === "home" || route === "start" || route === "feed" || route === "export" || route === "journey") return "full";
-    if (route === "storyboard") return "readonly"; // all groups read-only
-    if (route === "category") return "none"; // no one in phase 3
-    if (route === "wizard") return "none"; // locked for all
-    if (route === "osm") {
-      if (groupNumber === 3 || groupNumber === 4) return "full";
-      return "none";
-    }
-    if (route === "wheelmap") {
-      if (groupNumber === 1 || groupNumber === 2) return "full";
-      return "none";
-    }
-    if (route === "map") {
-      if (groupNumber === 1 || groupNumber === 2) return "full";
-      return "none";
-    }
+    if (route === "storyboard") return "readonly";
+    if (route === "category" || route === "wizard") return "none";
+    if (route === "osm" || route === "wheelmap" || route === "map") return "full";
     return "none";
   }
 
   return "none";
 }
 
-/** Tooltip for nav when link is disabled. */
+/** Tooltip for nav when link is disabled (phase-only). */
 export function getNavTooltip(
   route: RouteId,
   phase: WorkshopPhase,
-  groupNumber: 1 | 2 | 3 | 4 | null,
+  _groupNumber: 1 | 2 | 3 | 4 | null,
   phaseLabels: Record<WorkshopPhase, string>
 ): string {
-  const mode = getRouteAccess(phase, groupNumber, route);
+  const mode = getRouteAccess(phase, null, route);
   if (mode !== "none") return "";
 
   const routeToPhase: Partial<Record<RouteId, WorkshopPhase>> = {
@@ -122,18 +97,8 @@ export function getNavTooltip(
     phase0links: "0",
     export: "2",
   };
-  const routeToGroup: Partial<Record<RouteId, string>> = {
-    category: "Groups 3 & 4",
-    storyboard: "Groups 1 & 2",
-    osm: "Groups 3 & 4",
-    wheelmap: "Groups 1 & 2",
-    map: "Groups 1 & 2",
-  };
-
   const p = routeToPhase[route];
-  const g = routeToGroup[route];
   if (p && phase !== p) return `Available in ${phaseLabels[p as WorkshopPhase]}`;
-  if (g) return `Available for ${g}`;
   return "This module becomes available in a later phase.";
 }
 

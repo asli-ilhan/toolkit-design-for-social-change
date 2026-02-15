@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePhase } from "@/lib/PhaseContext";
 import {
-  getGroupNumber,
   getRouteAccess,
   getNavTooltip,
   PHASE_LABELS,
@@ -43,7 +41,7 @@ function NavLink({
       </span>
     );
   }
-  const readOnlyTip = access === "readonly" ? " (read-only for your group in this phase)" : "";
+  const readOnlyTip = access === "readonly" ? " (read-only in this phase)" : "";
   return (
     <Link
       href={href}
@@ -57,11 +55,6 @@ function NavLink({
 
 export function AppHeader() {
   const { phase } = usePhase();
-  const [groupNumber, setGroupNumber] = useState<1 | 2 | 3 | 4 | null>(null);
-
-  useEffect(() => {
-    setGroupNumber(getGroupNumber());
-  }, []);
 
   return (
     <header className="border-b border-white/10 bg-black/80 px-4 py-3 backdrop-blur-sm">
@@ -76,8 +69,8 @@ export function AppHeader() {
         </Link>
         <nav className="hidden items-center gap-4 text-xs sm:flex">
           {NAV_ITEMS.map(({ href, label, route }) => {
-            const access = getRouteAccess(phase, groupNumber, route);
-            const tooltip = getNavTooltip(route, phase, groupNumber, PHASE_LABELS);
+            const access = getRouteAccess(phase, null, route);
+            const tooltip = getNavTooltip(route, phase, null, PHASE_LABELS);
             return (
               <NavLink
                 key={route}

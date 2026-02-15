@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { PhaseGroupGuard } from "@/components/PhaseGroupGuard";
 import { usePhase } from "@/lib/PhaseContext";
-import { getGroupNumber, getRouteAccess } from "@/lib/accessControl";
 
 type Identity = {
   displayName: string;
@@ -50,12 +49,7 @@ function CategoryGovernanceContent() {
   const [reassignCount, setReassignCount] = useState<number | null>(null);
   const [reassignBusy, setReassignBusy] = useState(false);
   const [reassignMessage, setReassignMessage] = useState<string | null>(null);
-  const [groupNumber, setGroupNumber] = useState<1 | 2 | 3 | 4 | null>(null);
   const { phase } = usePhase();
-
-  useEffect(() => {
-    setGroupNumber(getGroupNumber());
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -227,9 +221,6 @@ function CategoryGovernanceContent() {
     }
   };
 
-  const categoryAccess = getRouteAccess(phase, groupNumber, "category");
-  const readOnly = categoryAccess === "readonly";
-
   return (
     <PhaseGroupGuard route="category">
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
@@ -272,13 +263,6 @@ function CategoryGovernanceContent() {
         </p>
       </div>
 
-      {readOnly && (
-        <p className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-[11px] text-white/70">
-          View only — submitting suggestions and using the Bulk Reassign tool are available for Groups 3 & 4 in this phase.
-        </p>
-      )}
-
-      {!readOnly && (
       <form
         onSubmit={handleSubmit}
         className="space-y-4 rounded-xl border border-white/15 bg-white/[0.02] p-5"
@@ -338,7 +322,6 @@ function CategoryGovernanceContent() {
           <p className="text-[11px] text-emerald-200">Suggestion saved.</p>
         )}
       </form>
-      )}
 
       <section className="rounded-xl border border-white/15 bg-white/[0.02] p-5">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
@@ -404,7 +387,6 @@ function CategoryGovernanceContent() {
         )}
       </section>
 
-      {!readOnly && (
       <section className="rounded-xl border border-white/15 bg-white/[0.02] p-5 space-y-4">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
           Bulk Reassign Tool
@@ -474,7 +456,6 @@ function CategoryGovernanceContent() {
           </p>
         )}
       </section>
-      )}
     </div>
     </PhaseGroupGuard>
   );

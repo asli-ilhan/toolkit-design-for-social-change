@@ -41,13 +41,14 @@ type Step = {
 
 type Evidence = {
   id: string;
+  step_index?: number | null;
   type: string;
   external_url: string | null;
   storage_path: string | null;
   caption: string;
 };
 
-type Tab = "summary" | "steps" | "evidence" | "osm";
+type Tab = "summary" | "steps" | "evidence";
 
 export default function JourneyDetailPage() {
   const params = useParams();
@@ -60,7 +61,6 @@ export default function JourneyDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeStepIndex, setActiveStepIndex] = useState<number | null>(null);
-  const [playingTimeline, setPlayingTimeline] = useState(false);
   const [localSessionId, setLocalSessionId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [evidenceUrls, setEvidenceUrls] = useState<Record<string, string>>({});
@@ -138,8 +138,8 @@ export default function JourneyDetailPage() {
           },
         ]);
         setEvidence([
-          { id: "e1", type: "photo", external_url: null, storage_path: null, caption: "Photo of lift notice (no faces)." },
-          { id: "e2", type: "policy_doc", external_url: null, storage_path: null, caption: "Link to accessibility statement / campus access page." },
+          { id: "e1", step_index: 1, type: "photo", external_url: null, storage_path: null, caption: "Photo of lift notice (no faces)." },
+          { id: "e2", step_index: null, type: "policy_doc", external_url: null, storage_path: null, caption: "Link to accessibility statement / campus access page." },
         ]);
       }
       setLoading(false);
@@ -178,11 +178,19 @@ export default function JourneyDetailPage() {
           .order("step_index");
         if (!cancelled && sData) setSteps(sData as Step[]);
 
-        const { data: eData } = await supabase
+        const { data: eDataWithStep, error: eErr } = await supabase
           .from("evidence")
-          .select("id, type, external_url, storage_path, caption")
+          .select("id, step_index, type, external_url, storage_path, caption")
           .eq("journey_id", id);
-        if (!cancelled && eData) setEvidence(eData as Evidence[]);
+        if (eErr) {
+          const { data: eDataFallback } = await supabase
+            .from("evidence")
+            .select("id, type, external_url, storage_path, caption")
+            .eq("journey_id", id);
+          if (!cancelled && eDataFallback) setEvidence(eDataFallback as Evidence[]);
+        } else if (!cancelled && eDataWithStep) {
+          setEvidence(eDataWithStep as Evidence[]);
+        }
       } catch (err: any) {
         if (!cancelled) setError(err?.message ?? "Could not load journey.");
       } finally {
@@ -202,9 +210,9 @@ export default function JourneyDetailPage() {
     (async () => {
       const next: Record<string, string> = {};
       for (const e of evidence) {
-        if (e.storage_path && e.type === "photo") {
+        if (e.type === "photo" && e.storage_path) {
           try {
-            const { data } = await supabase.storage.from("wizard").createSignedUrl(e.storage_path, 3600);
+            const { data } = await supabase.storage.from("evidence").createSignedUrl(e.storage_path, 3600);
             if (!cancelled && data?.signedUrl) next[e.id] = data.signedUrl;
           } catch {
             // ignore
@@ -228,7 +236,14 @@ export default function JourneyDetailPage() {
       await supabase.from("evidence").delete().eq("journey_id", id);
       const { error } = await supabase.from("journeys").delete().eq("id", id);
       if (error) throw error;
-      router.push("/feed");
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem("feed-deleted-journey-id", id);
+        } catch {
+          // ignore
+        }
+      }
+      window.location.href = "/feed";
     } catch (err: any) {
       setError(err?.message ?? "Could not delete.");
     } finally {
@@ -263,29 +278,7 @@ export default function JourneyDetailPage() {
     { key: "summary", label: "Summary" },
     { key: "steps", label: "Steps" },
     { key: "evidence", label: "Evidence" },
-    { key: "osm", label: "OSM" },
   ];
-
-  const osmNoteBody = [
-    `Location: ${journey.location_text || journey.campus_or_system}`,
-    `Issue: ${journey.what_happened}`,
-    `Expected: ${journey.expected_outcome}`,
-    `Logged by: Week 6 Access Journey`,
-  ].join("\n\n");
-
-  // Simple auto-advance timeline playback
-  useEffect(() => {
-    if (!playingTimeline || activeStepIndex == null) return;
-    if (activeStepIndex >= steps.length - 1) {
-      setPlayingTimeline(false);
-      return;
-    }
-    const timer = setTimeout(
-      () => setActiveStepIndex((prev) => (prev == null ? 0 : prev + 1)),
-      2000,
-    );
-    return () => clearTimeout(timer);
-  }, [playingTimeline, activeStepIndex, steps.length]);
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
@@ -329,26 +322,6 @@ export default function JourneyDetailPage() {
               </span>
             )}
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/story-board?add=${journey.id}`}
-            className="rounded-full border-2 border-white bg-black px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white hover:bg-white/10"
-          >
-            Add to Story Board
-          </Link>
-          <Link
-            href={`/osm-helper?journey=${journey.id}`}
-            className="rounded-full border-2 border-white bg-black px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white hover:bg-white/10"
-          >
-            Create OSM Note
-          </Link>
-          <Link
-            href={`/category?flag=${journey.id}`}
-            className="rounded-full border-2 border-white bg-black px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white hover:bg-white/10"
-          >
-            Flag for governance
-          </Link>
         </div>
       </div>
 
@@ -475,18 +448,6 @@ export default function JourneyDetailPage() {
             </div>
             <p className="mt-1 text-white/90">{journey.journey_goal}</p>
           </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-white/50">
-              Missing / unclear (interpretation)
-            </div>
-            <p className="mt-1 text-white/90">{journey.missing_or_unclear}</p>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-white/50">
-              Suggested improvement (action)
-            </div>
-            <p className="mt-1 text-white/90">{journey.suggested_improvement}</p>
-          </div>
         </section>
       )}
 
@@ -496,45 +457,7 @@ export default function JourneyDetailPage() {
             <p className="text-sm text-white/60">No steps recorded.</p>
           ) : (
             <>
-              <div className="flex items-center justify-between gap-3 text-[11px]">
-                <div className="text-white/70">
-                  Timeline playback:{" "}
-                  {activeStepIndex != null
-                    ? `Step ${activeStepIndex + 1} of ${steps.length}`
-                    : "Select a step or press Play"}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    disabled={steps.length === 0}
-                    onClick={() => setActiveStepIndex(0)}
-                    className="rounded-full border-2 border-white bg-black px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white hover:bg-white/10 disabled:opacity-40"
-                  >
-                    Start
-                  </button>
-                  <button
-                    type="button"
-                    disabled={steps.length === 0}
-                    onClick={() => {
-                      if (activeStepIndex == null) {
-                        setActiveStepIndex(0);
-                        setPlayingTimeline(true);
-                        return;
-                      }
-                      setPlayingTimeline((prev) => !prev);
-                    }}
-                    className="rounded-full border-2 border-white bg-black px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white hover:bg-white/10 disabled:opacity-40"
-                  >
-                    {playingTimeline ? "Pause" : "Play"}
-                  </button>
-                </div>
-              </div>
-              {playingTimeline && activeStepIndex != null && (
-                <div className="text-[11px] text-white/60">
-                  Step will auto-advance every 2 seconds.
-                </div>
-              )}
-              <ol className="mt-3 space-y-3 text-sm">
+              <ol className="space-y-3 text-sm">
                 {steps.map((s, idx) => (
                   <li
                     key={s.id}
@@ -566,6 +489,36 @@ export default function JourneyDetailPage() {
                       </span>
                       {s.observe}
                     </div>
+                    {evidence
+                      .filter((e) => e.step_index === s.step_index)
+                      .map((e) => (
+                        <div
+                          key={e.id}
+                          className="mt-2 rounded border border-white/15 bg-black/30 p-2"
+                        >
+                          <span className="text-[10px] uppercase tracking-[0.12em] text-white/50">
+                            {e.type === "photo" ? "Photo" : "URL"}
+                          </span>
+                          {e.type === "photo" && evidenceUrls[e.id] && (
+                            <img
+                              src={evidenceUrls[e.id]}
+                              alt={e.caption}
+                              className="mt-1 max-h-40 w-auto max-w-full rounded border border-white/20 object-contain"
+                            />
+                          )}
+                          {e.external_url && (
+                            <a
+                              href={e.external_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-1 block truncate text-[11px] text-white/70 underline hover:text-white"
+                            >
+                              {e.external_url}
+                            </a>
+                          )}
+                          <p className="mt-1 text-[11px] text-white/80">{e.caption}</p>
+                        </div>
+                      ))}
                   </li>
                 ))}
               </ol>
@@ -576,11 +529,14 @@ export default function JourneyDetailPage() {
 
       {tab === "evidence" && (
         <section className="space-y-3 rounded-xl border border-white/15 bg-white/[0.02] p-5">
-          {evidence.length === 0 ? (
-            <p className="text-sm text-white/60">No evidence items.</p>
-          ) : (
+          {(() => {
+            const journeyLevelEvidence = evidence.filter((e) => e.step_index == null);
+            if (journeyLevelEvidence.length === 0) {
+              return <p className="text-sm text-white/60">No evidence from the Evidence step.</p>;
+            }
+            return (
             <ul className="space-y-3 text-sm">
-              {evidence.map((e) => (
+              {journeyLevelEvidence.map((e) => (
                 <li
                   key={e.id}
                   className="flex flex-col gap-1 rounded-lg border border-white/12 bg-black/40 p-3"
@@ -609,39 +565,8 @@ export default function JourneyDetailPage() {
                 </li>
               ))}
             </ul>
-          )}
-        </section>
-      )}
-
-      {tab === "osm" && (
-        <section className="space-y-4 rounded-xl border border-white/15 bg-white/[0.02] p-5 text-sm">
-          <p className="text-white/80">
-            Use OpenStreetMap Notes to report this issue without editing the map.
-            Copy the text below and paste it when creating an OSM Note.
-          </p>
-          <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-white/20 bg-black/70 p-3 text-[12px] text-white/85">
-            {osmNoteBody}
-          </pre>
-          {journey.osm_note_url ? (
-            <div>
-              <span className="text-[10px] uppercase text-white/50">OSM note URL: </span>
-              <a
-                href={journey.osm_note_url}
-                target="_blank"
-                rel="noreferrer"
-                className="block truncate text-white/80 underline"
-              >
-                {journey.osm_note_url}
-              </a>
-            </div>
-          ) : (
-            <Link
-              href="/osm-helper"
-              className="inline-flex rounded-full border-2 border-white bg-black px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white hover:bg-white/10"
-            >
-              Open OSM Helper
-            </Link>
-          )}
+            );
+          })()}
         </section>
       )}
     </div>

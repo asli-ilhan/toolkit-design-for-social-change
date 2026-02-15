@@ -34,6 +34,34 @@ alter table public.category_suggestions add column if not exists observed_patter
 alter table public.category_suggestions drop column if exists status;
 alter table public.category_suggestions drop column if exists approved_at;
 
--- 4) Story board notes: claim_type + public_strategy
+-- 4) Story board notes: claim, supporting_evidence_ids, what_is_missing, framing_for_figma, extra_notes, claim_type, public_strategy
+alter table public.story_board_notes add column if not exists claim text;
+alter table public.story_board_notes add column if not exists supporting_evidence_ids uuid[] default '{}';
+alter table public.story_board_notes add column if not exists what_is_missing text;
+alter table public.story_board_notes add column if not exists framing_for_figma text;
+alter table public.story_board_notes add column if not exists extra_notes text;
 alter table public.story_board_notes add column if not exists claim_type text;
 alter table public.story_board_notes add column if not exists public_strategy text not null default 'Not ready for public contribution';
+
+-- 5) Evidence: optional step_index (when set, evidence is for that journey step)
+alter table public.evidence add column if not exists step_index int;
+
+-- 6) Table RLS: ensure anon can insert into journeys, journey_steps, evidence (fix "new row violates row-level security policy")
+drop policy if exists "Allow anon insert journeys" on public.journeys;
+create policy "Allow anon insert journeys" on public.journeys for insert to anon with check (true);
+drop policy if exists "Allow anon insert journey_steps" on public.journey_steps;
+create policy "Allow anon insert journey_steps" on public.journey_steps for insert to anon with check (true);
+drop policy if exists "Allow anon insert evidence" on public.evidence;
+create policy "Allow anon insert evidence" on public.evidence for insert to anon with check (true);
+
+-- 7) Storage RLS: allow anon to upload and read from the "evidence" bucket (required for step/evidence photos).
+--    Ensure the bucket exists in Dashboard → Storage and is set to Public (or these policies apply to private buckets).
+drop policy if exists "Allow anon upload evidence" on storage.objects;
+create policy "Allow anon upload evidence"
+  on storage.objects for insert to anon
+  with check (bucket_id = 'evidence');
+
+drop policy if exists "Allow anon read evidence storage" on storage.objects;
+create policy "Allow anon read evidence storage"
+  on storage.objects for select to anon
+  using (bucket_id = 'evidence');

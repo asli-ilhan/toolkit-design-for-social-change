@@ -6,7 +6,7 @@ import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { PhaseGroupGuard } from "@/components/PhaseGroupGuard";
 import { usePhase } from "@/lib/PhaseContext";
-import { getGroupNumber, getRouteAccess } from "@/lib/accessControl";
+import { getRouteAccess } from "@/lib/accessControl";
 
 type StoryNote = {
   id: string;
@@ -32,6 +32,13 @@ type JourneyOption = {
   barrier_type: string | null;
   issue_scope: string | null;
   claimed_statement_id: string | null;
+};
+
+type LoggedClaim = {
+  id: string;
+  source_url: string;
+  source_label: string | null;
+  claim_text: string;
 };
 
 const CLAIM_TYPE_OPTIONS = [
@@ -64,7 +71,8 @@ function StoryBoardContent() {
   const addId = searchParams.get("add");
 
   const [notes, setNotes] = useState<StoryNote[]>([]);
-  const [claim, setClaim] = useState("");
+  const [loggedClaims, setLoggedClaims] = useState<LoggedClaim[]>([]);
+  const [selectedClaimId, setSelectedClaimId] = useState("");
   const [claimType, setClaimType] = useState("");
   const [publicStrategy, setPublicStrategy] = useState("");
   const [supportingEvidenceIds, setSupportingEvidenceIds] = useState<string[]>([]);
@@ -78,12 +86,7 @@ function StoryBoardContent() {
   const [saving, setSaving] = useState(false);
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [pendingCategoryCount, setPendingCategoryCount] = useState<number>(0);
-  const [groupNumber, setGroupNumber] = useState<1 | 2 | 3 | 4 | null>(null);
   const { phase } = usePhase();
-
-  useEffect(() => {
-    setGroupNumber(getGroupNumber());
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -107,17 +110,32 @@ function StoryBoardContent() {
     async function load() {
       try {
         const supabase = getSupabaseClient();
+        const fullSelect = "id, title, note, tags, linked_journey_ids, claim, supporting_evidence_ids, what_is_missing, framing_for_figma, extra_notes, claim_type, public_strategy, created_at, created_session_id";
         const { data, error: dbError } = await supabase
           .from("story_board_notes")
-          .select("id, title, note, tags, linked_journey_ids, claim, supporting_evidence_ids, what_is_missing, framing_for_figma, extra_notes, claim_type, public_strategy, created_at, created_session_id")
+          .select(fullSelect)
           .order("created_at", { ascending: false })
           .limit(20);
         if (dbError) throw dbError;
         if (!cancelled && data) {
           setNotes(data as StoryNote[]);
+          return;
         }
       } catch {
-        // Graceful fallback: no live notes until Supabase is wired.
+        // Fallback: schema may lack claim/supporting_evidence_ids/etc.; try minimal columns
+        try {
+          const supabase = getSupabaseClient();
+          const { data, error: dbError2 } = await supabase
+            .from("story_board_notes")
+            .select("id, title, note, tags, linked_journey_ids, created_at, created_session_id")
+            .order("created_at", { ascending: false })
+            .limit(20);
+          if (!cancelled && !dbError2 && data) {
+            setNotes(data as StoryNote[]);
+          }
+        } catch {
+          // no live notes
+        }
       }
     }
     load();
@@ -165,11 +183,35 @@ function StoryBoardContent() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadClaims() {
+      try {
+        const supabase = getSupabaseClient();
+        const { data, error: dbError } = await supabase
+          .from("claimed_access_statements")
+          .select("id, source_url, source_label, claim_text")
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (dbError) throw dbError;
+        if (!cancelled && data) setLoggedClaims(data as LoggedClaim[]);
+      } catch {
+        // ignore
+      }
+    }
+    loadClaims();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!claim.trim()) {
-      setError("Claim is required.");
+    const selectedClaim = selectedClaimId ? loggedClaims.find((c) => c.id === selectedClaimId) : null;
+    const claimText = selectedClaim?.claim_text?.trim() ?? "";
+    if (!claimText) {
+      setError("Select a claim from Phase 0 (logged on the home page).");
       return;
     }
     if (!publicStrategy) {
@@ -195,15 +237,15 @@ function StoryBoardContent() {
         .split(",")
         .map((t) => t.trim())
         .filter(Boolean);
-      const title = claim.slice(0, 80) + (claim.length > 80 ? "…" : "");
+      const title = claimText.slice(0, 80) + (claimText.length > 80 ? "…" : "");
       const { data, error: dbError } = await supabase
         .from("story_board_notes")
         .insert({
           created_name: identity?.displayName ?? null,
           created_session_id: identity?.sessionId ?? null,
           title,
-          note: extraNotes || claim,
-          claim: claim.trim(),
+          note: extraNotes || claimText,
+          claim: claimText,
           claim_type: claimType.trim() || null,
           public_strategy: publicStrategy,
           supporting_evidence_ids: supportingEvidenceIds,
@@ -218,7 +260,7 @@ function StoryBoardContent() {
       if (dbError) throw dbError;
       if (data) {
         setNotes((prev) => [data as StoryNote, ...prev]);
-        setClaim("");
+        setSelectedClaimId("");
         setClaimType("");
         setPublicStrategy("");
         setSupportingEvidenceIds([]);
@@ -238,15 +280,14 @@ function StoryBoardContent() {
     }
   };
 
-  const storyboardAccess = getRouteAccess(phase, groupNumber, "storyboard");
-  const readOnly = storyboardAccess === "readonly";
+  const readOnly = getRouteAccess(phase, null, "storyboard") === "readonly";
 
   return (
     <PhaseGroupGuard route="storyboard">
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
       {readOnly && (
         <p className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-[11px] text-white/70">
-          View only — creating story notes is available for Groups 1 & 2 in Phase 2.
+          View only — creating story notes is available in Phase 2.
         </p>
       )}
       {pendingCategoryCount > 0 && (
@@ -268,15 +309,15 @@ function StoryBoardContent() {
 
       <div className="rounded-xl border border-white/15 bg-white/[0.03] p-5">
         <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/50 mb-3">
-          Before writing a claim
+          Before creating a story note
         </div>
         <p className="text-sm text-white/85 mb-2">
-          A claim must be defensible.
+          Select a claim that was logged in Phase 0 (Claimed Access Scan on the home page). The claim must be defensible.
         </p>
         <ul className="list-disc list-inside text-sm text-white/75 space-y-1">
           <li>Can this claim be supported by at least 3 journeys?</li>
           <li>Is the claim about a system, not a single frustration?</li>
-          <li>Does the evidence contradict an institutional claim?</li>
+          <li>Does the evidence contradict the institutional claim?</li>
         </ul>
         <p className="mt-3 text-[11px] text-white/60">
           You are not describing an incident. You are articulating a pattern.
@@ -291,13 +332,38 @@ function StoryBoardContent() {
         <form onSubmit={handleCreate} className="space-y-3">
           <div className="space-y-1">
             <label className="text-[11px] text-white/70">Section 1: Claim (required)</label>
-            <input
-              type="text"
-              value={claim}
-              onChange={(e) => setClaim(e.target.value)}
-              placeholder="e.g., Step-free access gaps at UAL Camberwell Peckham Building entrance A"
-              className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
-            />
+            <p className="text-[10px] text-white/50 mb-1">
+              Select a claim logged in Phase 0 on the home page.
+            </p>
+            <select
+              value={selectedClaimId}
+              onChange={(e) => setSelectedClaimId(e.target.value)}
+              className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white focus:border-white/60 focus:outline-none"
+            >
+              <option value="">Select a claim from Phase 0…</option>
+              {loggedClaims.map((c) => {
+                const sourceLabel = c.source_label?.trim() || c.source_url.slice(0, 50) + (c.source_url.length > 50 ? "…" : "");
+                const claimPreview = c.claim_text.length > 60 ? c.claim_text.slice(0, 57) + "…" : c.claim_text;
+                return (
+                  <option key={c.id} value={c.id}>
+                    {sourceLabel} — {claimPreview}
+                  </option>
+                );
+              })}
+            </select>
+            {loggedClaims.length === 0 && (
+              <p className="mt-1.5 text-[11px] text-amber-200/90">
+                No claims in Phase 0 yet. On the home page, set Phase 0 and use &quot;Log a Claimed Access Statement&quot; to add claims, then return here.
+              </p>
+            )}
+            {selectedClaimId && (() => {
+              const c = loggedClaims.find((x) => x.id === selectedClaimId);
+              return c ? (
+                <p className="mt-1.5 rounded border border-white/15 bg-black/30 px-2 py-1.5 text-[12px] text-white/90">
+                  {c.claim_text}
+                </p>
+              ) : null;
+            })()}
           </div>
           <div className="space-y-1">
             <label className="text-[11px] text-white/70">Claim Type (optional)</label>
@@ -325,6 +391,9 @@ function StoryBoardContent() {
           </div>
           <div className="space-y-1">
             <label className="text-[11px] text-white/70">Section 2: Supporting Evidence (required, min 1)</label>
+            <p className="text-[10px] text-white/50 mb-1">
+              Select journeys you logged in Phase 1 (Evidence Collection). These are the access journey logs from the feed.
+            </p>
             <select
               multiple
               value={supportingEvidenceIds}
@@ -347,10 +416,10 @@ function StoryBoardContent() {
             </select>
             <p className="text-[10px] text-white/50">Hold Ctrl/Cmd to select multiple.</p>
             <p className="text-[11px] text-white/70">
-              Selected evidence count: <strong>{supportingEvidenceIds.length}</strong>
+              Selected journeys: <strong>{supportingEvidenceIds.length}</strong>
             </p>
             <p className="text-[10px] text-white/50">
-              Strong claims usually require 3+ journeys.
+              Strong claims usually require 3+ journeys from Phase 1.
             </p>
           </div>
           <div className="space-y-1">
@@ -358,8 +427,11 @@ function StoryBoardContent() {
             <textarea value={whatIsMissing} onChange={(e) => setWhatIsMissing(e.target.value)} rows={3} placeholder="What information or evidence is missing?" className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none" />
           </div>
           <div className="space-y-1">
-            <label className="text-[11px] text-white/70">Section 4: How will we frame this in Figma? (required)</label>
-            <textarea value={framingForFigma} onChange={(e) => setFramingForFigma(e.target.value)} rows={3} placeholder="How will this be presented in the storyboard?" className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none" />
+            <label className="text-[11px] text-white/70">Section 4: How will we frame this in the storyboard as toolkit guidance? (required)</label>
+            <p className="text-[10px] text-white/50 mb-1">
+              Describe how this evidence will be framed in the storyboard so it works as clear toolkit guidance for others.
+            </p>
+            <textarea value={framingForFigma} onChange={(e) => setFramingForFigma(e.target.value)} rows={3} placeholder="e.g. One card per claim, with 3–6 journey snippets as evidence; audience sees claimed vs experienced access side by side." className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none" />
           </div>
           <div className="space-y-1">
             <label className="text-[11px] text-white/70">Tags (optional)</label>
@@ -445,7 +517,7 @@ function StoryBoardContent() {
                 <p className="text-[12px] text-white/80"><strong>What is missing:</strong> {n.what_is_missing}</p>
               )}
               {n.framing_for_figma && (
-                <p className="text-[12px] text-white/80"><strong>Framing for Figma:</strong> {n.framing_for_figma}</p>
+                <p className="text-[12px] text-white/80"><strong>Framing for Toolkit Guidance:</strong> {n.framing_for_figma}</p>
               )}
               {(n.extra_notes || n.note) && (
               <pre className="whitespace-pre-wrap text-[12px] text-white/80">

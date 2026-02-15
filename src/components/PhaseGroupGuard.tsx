@@ -3,31 +3,24 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePhase } from "@/lib/PhaseContext";
-import {
-  getGroupNumber,
-  getRouteAccess,
-  type RouteId,
-  type AccessMode,
-} from "@/lib/accessControl";
+import { getRouteAccess, type RouteId, type AccessMode } from "@/lib/accessControl";
 
 type Props = {
   route: RouteId;
   children: React.ReactNode;
 };
 
-/** Redirects to home with message if phase+group cannot access this route. */
+/** Redirects to home with message if phase cannot access this route (phase-only; group not used). */
 export function PhaseGroupGuard({ route, children }: Props) {
   const router = useRouter();
   const { phase } = usePhase();
-  const [groupNumber, setGroupNumber] = useState<1 | 2 | 3 | 4 | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setGroupNumber(getGroupNumber());
     setMounted(true);
   }, []);
 
-  const access: AccessMode = mounted ? getRouteAccess(phase, groupNumber, route) : "none";
+  const access: AccessMode = mounted ? getRouteAccess(phase, null, route) : "none";
 
   useEffect(() => {
     if (!mounted || access !== "none") return;

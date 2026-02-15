@@ -1,6 +1,9 @@
 -- Week 6 Access Journey Logging Toolkit – Supabase schema
 -- Run this in the Supabase Dashboard → SQL Editor (New query) for your project.
--- Then create a storage bucket named "wizard" in Storage if you use photo uploads.
+--
+-- STORAGE (required for step/evidence photo uploads):
+-- The app uses a bucket named "evidence". In Dashboard → Storage, create a bucket
+-- named "evidence" if needed; set Public or add policies for anon upload + read.
 
 -- Groups (for Start screen: table/group identity only; workshop is phase-based, not role-based)
 create table if not exists public.groups (
@@ -55,9 +58,11 @@ create table if not exists public.journey_steps (
 );
 
 -- Evidence (URLs and photo references; actual files go in storage bucket "evidence")
+-- step_index: when set, this evidence is for that journey step (1-based); when null, journey-level evidence
 create table if not exists public.evidence (
   id uuid primary key default gen_random_uuid(),
   journey_id uuid not null references public.journeys(id) on delete cascade,
+  step_index int,
   type text not null,
   storage_path text,
   external_url text,
@@ -218,6 +223,7 @@ alter table public.story_board_notes add column if not exists framing_for_figma 
 alter table public.story_board_notes add column if not exists extra_notes text;
 alter table public.story_board_notes add column if not exists claim_type text;
 alter table public.story_board_notes add column if not exists public_strategy text not null default 'Not ready for public contribution';
+alter table public.evidence add column if not exists step_index int;
 
 -- Seed groups when table is empty (phase-neutral names; workshop flow is phase-based)
 insert into public.groups (name, role_key, role_title)

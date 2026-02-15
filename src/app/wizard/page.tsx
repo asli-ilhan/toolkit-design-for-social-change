@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Field } from "@/components/ui/Field";
 import { PhaseGroupGuard } from "@/components/PhaseGroupGuard";
 import { getSupabaseClient } from "@/lib/supabaseClient";
@@ -8,13 +8,20 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 type Mode = "physical" | "digital" | "";
 type AccessResult = "granted" | "blocked" | "partial" | "unclear" | "";
 type BarrierType = "physical" | "digital" | "information" | "process" | "mixed" | "";
-type Status = "observed" | "confirmed" | "needs_verification" | "";
 type UserFocus = "wheelchair" | "blind_vi" | "both" | "other" | "";
+
+type StepEvidence = {
+  kind: "file" | "url";
+  caption: string;
+  url?: string;
+  file?: File | null;
+};
 
 type Step = {
   goTo: string;
   attemptTo: string;
   observe: string;
+  evidence?: StepEvidence | null;
 };
 
 type EvidenceKind = "file" | "url";
@@ -100,21 +107,15 @@ export default function WizardPage() {
 
   // Step 5 – Classification
   const [barrierType, setBarrierType] = useState<BarrierType>("");
-  const [whereHappened, setWhereHappened] = useState("");
-  const [whereOther, setWhereOther] = useState("");
-  const [status, setStatus] = useState<Status>("");
 
-  // Step 6 – Interpretation + action
-  const [missingUnclear, setMissingUnclear] = useState("");
-  const [suggestedImprovement, setSuggestedImprovement] = useState("");
-
-  // Step 7 – Evidence
+  // Step 6 – Evidence
   const [evidenceItems, setEvidenceItems] = useState<EvidenceItem[]>([]);
-  const [guidanceUrls, setGuidanceUrls] = useState<string[]>([""]);
+  const [guidanceUrls, setGuidanceUrls] = useState<string[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,8 +156,6 @@ export default function WizardPage() {
       case 5:
         return "Classification";
       case 6:
-        return "Interpretation + Action";
-      case 7:
         return "Evidence";
       default:
         return "";
@@ -228,32 +227,9 @@ export default function WizardPage() {
 
     if (index === 5) {
       if (!barrierType) newErrors.barrierType = "Pick the dominant barrier.";
-      if (!whereHappened) newErrors.whereHappened = "Select where this happened in the journey.";
-      if (whereHappened === "other" && !whereOther.trim()) {
-        newErrors.whereOther = "Describe the stage if you pick Other.";
-      }
-      if (!status) newErrors.status = "Select the current status of this observation.";
     }
 
     if (index === 6) {
-      if (missingUnclear.trim().length < 10) {
-        newErrors.missingUnclear =
-          "Write at least 10 characters about what was missing or unclear.";
-      }
-      if (suggestedImprovement.trim().length < 10) {
-        newErrors.suggestedImprovement =
-          "Write at least 10 characters describing a practical improvement.";
-      }
-    }
-
-    if (index === 7) {
-      if (evidenceItems.length < 1) {
-        newErrors.evidence = "Add at least one evidence item (photo or URL).";
-      }
-      const guidanceCount = guidanceUrls.filter((g) => g.trim().length > 0).length;
-      if (guidanceCount < 1) {
-        newErrors.guidance = "Add at least one guidance/policy URL (required).";
-      }
       evidenceItems.forEach((item, idx) => {
         if (item.caption.trim().length < 5) {
           newErrors[`evidence_${idx}_caption`] = "Caption must be at least 5 characters.";
@@ -281,14 +257,9 @@ export default function WizardPage() {
     if (whatHappened.trim().length < 20) missing.push("What happened (at least 20 characters)");
     if (expectedOutcome.trim().length < 10) missing.push("Expected outcome (at least 10 characters)");
     if (!barrierType) missing.push("Barrier type selected");
-    if (!whereHappened) missing.push("Where it happened selected");
-    if (!status) missing.push("Status selected");
     if (mode === "digital") {
       if (!url.startsWith("http")) missing.push("URL for digital mode");
     }
-    if (evidenceItems.length < 1) missing.push("At least one evidence item (photo or URL)");
-    const guidanceCount = guidanceUrls.filter((g) => g.trim().length > 0).length;
-    if (guidanceCount < 1) missing.push("At least one guidance URL");
     return missing;
   }
 
@@ -312,7 +283,7 @@ export default function WizardPage() {
 
   const goNext = () => {
     if (!validateStep(stepIndex)) return;
-    setStepIndex((prev) => Math.min(7, prev + 1));
+    setStepIndex((prev) => Math.min(6, prev + 1));
   };
 
   const goBack = () => {
@@ -322,17 +293,26 @@ export default function WizardPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSaving(true);
     setSubmitError(null);
     setSubmitted(false);
-    if (!validateStep(7)) return;
+
+    if (!validateStep(6)) {
+      submittingRef.current = false;
+      setSaving(false);
+      return;
+    }
     const missing = getCompletionMissing();
     if (missing.length > 0) {
       setErrors((prev) => ({ ...prev, _completionSummary: "see below" }));
+      submittingRef.current = false;
+      setSaving(false);
       return;
     }
 
     try {
-      setSaving(true);
       const supabase = getSupabaseClient();
 
       const rawIdentity =
@@ -343,6 +323,8 @@ export default function WizardPage() {
         setSubmitError(
           "Set your name and group first on the Start screen before logging an entry.",
         );
+        submittingRef.current = false;
+        setSaving(false);
         return;
       }
       let identity: {
@@ -357,6 +339,8 @@ export default function WizardPage() {
         setSubmitError(
           "Your local identity is invalid. Please revisit the Start screen and enter your details again.",
         );
+        submittingRef.current = false;
+        setSaving(false);
         return;
       }
 
@@ -396,12 +380,12 @@ export default function WizardPage() {
           what_happened: whatHappened,
           expected_outcome: expectedOutcome,
           barrier_type: barrierType,
-          where_happened: whereHappened,
-          where_happened_other: whereHappened === "other" ? whereOther || null : null,
+          where_happened: null,
+          where_happened_other: null,
           access_result: accessResult,
-          missing_or_unclear: missingUnclear,
-          suggested_improvement: suggestedImprovement,
-          status,
+          missing_or_unclear: null,
+          suggested_improvement: null,
+          status: "observed",
         })
         .select("id, journey_code")
         .single();
@@ -440,6 +424,7 @@ export default function WizardPage() {
         } else {
           evidenceRows.push({
             journey_id: journeyId,
+            step_index: null,
             type: "url",
             storage_path: null,
             external_url: item.url ?? null,
@@ -448,11 +433,36 @@ export default function WizardPage() {
         }
       });
 
+      // Step-level evidence (image or URL per step)
+      steps.forEach((s, idx) => {
+        if (!s.evidence) return;
+        const ev = s.evidence;
+        if (ev.kind === "url" && ev.url?.trim()) {
+          evidenceRows.push({
+            journey_id: journeyId,
+            step_index: idx + 1,
+            type: "url",
+            storage_path: null,
+            external_url: ev.url.trim(),
+            caption: ev.caption?.trim() || `Step ${idx + 1} evidence`,
+          });
+        } else if (ev.kind === "file" && ev.file) {
+          fileItems.push({
+            id: `step-${idx}`,
+            kind: "file",
+            caption: ev.caption?.trim() || `Step ${idx + 1} photo`,
+            file: ev.file,
+          } as EvidenceItem);
+          (fileItems[fileItems.length - 1] as any)._stepIndex = idx + 1;
+        }
+      });
+
       guidanceUrls
         .filter((g) => g.trim().length > 0)
         .forEach((g) =>
           evidenceRows.push({
             journey_id: journeyId,
+            step_index: null,
             type: "policy_doc",
             storage_path: null,
             external_url: g,
@@ -495,7 +505,7 @@ export default function WizardPage() {
           const path = `${folder}/${filename}`;
 
           const { error: uploadError } = await supabase.storage
-            .from("wizard")
+            .from("evidence")
             .upload(path, file, {
               cacheControl: "3600",
               upsert: false,
@@ -505,8 +515,10 @@ export default function WizardPage() {
             throw uploadError;
           }
 
+          const stepIndex = (item as EvidenceItem & { _stepIndex?: number })._stepIndex ?? null;
           uploadedFileRows.push({
             journey_id: journeyId,
+            step_index: stepIndex,
             type: "photo",
             storage_path: path,
             external_url: null,
@@ -528,12 +540,17 @@ export default function WizardPage() {
 
       setSubmitted(true);
     } catch (err: any) {
+      const msg = err?.message ?? "";
+      const isBucketError =
+        /bucket not found|Bucket not found|object not found|storage/i.test(msg);
       setSubmitError(
-        err?.message ??
-          "There was a problem saving this entry. Check Supabase auth, schema, and RLS configuration.",
+        isBucketError
+          ? "Storage bucket 'evidence' not found. In Supabase Dashboard go to Storage → New bucket → create a bucket named exactly 'evidence', then set it to Public (or add a policy that allows uploads and reads). Then try again."
+          : msg || "There was a problem saving this entry. Check Supabase auth, schema, and RLS configuration.",
       );
       setSubmitted(false);
     } finally {
+      submittingRef.current = false;
       setSaving(false);
     }
   };
@@ -549,9 +566,46 @@ export default function WizardPage() {
     );
   };
 
+  const setStepEvidenceKind = (idx: number, kind: "file" | "url" | null) => {
+    setSteps((prev) =>
+      prev.map((s, i) =>
+        i === idx
+          ? kind === null
+            ? { ...s, evidence: null }
+            : { ...s, evidence: { kind, caption: "", url: kind === "url" ? "" : undefined, file: null } }
+          : s,
+      ),
+    );
+  };
+
+  const updateStepEvidence = (
+    idx: number,
+    field: keyof StepEvidence,
+    value: string | File | null,
+  ) => {
+    setSteps((prev) =>
+      prev.map((s, i) => {
+        if (i !== idx || !s.evidence) return s;
+        const ev = { ...s.evidence };
+        if (field === "caption") ev.caption = value as string;
+        else if (field === "url") ev.url = value as string;
+        else if (field === "file") ev.file = value as File | null;
+        return { ...s, evidence: ev };
+      }),
+    );
+  };
+
   const removeStep = (idx: number) => {
     if (steps.length <= MIN_STEPS) return;
     setSteps((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const addStepEvidence = (idx: number, kind: "file" | "url") => {
+    setSteps((prev) =>
+      prev.map((s, i) =>
+        i === idx ? { ...s, evidence: { kind, caption: "", url: kind === "url" ? "" : undefined, file: null } } : s,
+      ),
+    );
   };
 
   const addEvidence = (kind: EvidenceKind) => {
@@ -587,16 +641,6 @@ export default function WizardPage() {
     setEvidenceItems((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const updateGuidance = (idx: number, value: string) => {
-    setGuidanceUrls((prev) =>
-      prev.map((g, i) => (i === idx ? value : g)),
-    );
-  };
-
-  const addGuidance = () => {
-    setGuidanceUrls((prev) => [...prev, ""]);
-  };
-
   return (
     <PhaseGroupGuard route="wizard">
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
@@ -628,12 +672,7 @@ export default function WizardPage() {
           <StepPill active={stepIndex === 3} index={3} label="Steps" />
           <StepPill active={stepIndex === 4} index={4} label="Outcome" />
           <StepPill active={stepIndex === 5} index={5} label="Classification" />
-          <StepPill
-            active={stepIndex === 6}
-            index={6}
-            label="Interpretation + Action"
-          />
-          <StepPill active={stepIndex === 7} index={7} label="Evidence" />
+          <StepPill active={stepIndex === 6} index={6} label="Evidence" />
         </div>
       </div>
 
@@ -800,7 +839,7 @@ export default function WizardPage() {
                     value={locationText}
                     onChange={(e) => setLocationText(e.target.value)}
                     rows={3}
-                    placeholder="e.g., UAL Camberwell Peckham Building, Main entrance A, lift bank near reception."
+                    placeholder="e.g., UAL Camberwell Peckham Building, Main entrance A, lift bank near reception, classroom PB_502."
                     className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
                   />
                 </Field>
@@ -901,6 +940,85 @@ export default function WizardPage() {
                     className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
                   />
                 </Field>
+                <div className="space-y-2 border-t border-white/10 pt-2">
+                  <p className="text-[11px] font-medium text-white/70">
+                    Step evidence (optional)
+                  </p>
+                  <p className="text-[10px] text-white/50">
+                    Add an image or URL for this step.
+                  </p>
+                  {!s.evidence ? (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => addStepEvidence(idx, "file")}
+                        className="rounded-full border-2 border-white bg-black px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-white/10"
+                      >
+                        Image
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addStepEvidence(idx, "url")}
+                        className="rounded-full border-2 border-white bg-black px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-white/10"
+                      >
+                        URL
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setStepEvidenceKind(idx, s.evidence!.kind === "file" ? "url" : "file")}
+                          className="text-[10px] text-white/60 underline hover:text-white/80"
+                        >
+                          Switch to {s.evidence!.kind === "file" ? "URL" : "image"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStepEvidenceKind(idx, null)}
+                          className="text-[10px] text-white/60 underline hover:text-white/80"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      {s.evidence.kind === "url" ? (
+                        <div className="space-y-1">
+                          <input
+                            type="url"
+                            value={s.evidence.url ?? ""}
+                            onChange={(e) => updateStepEvidence(idx, "url", e.target.value)}
+                            placeholder="https://…"
+                            className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
+                          />
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] ?? null;
+                              updateStepEvidence(idx, "file", file);
+                            }}
+                            className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-xs text-white file:mr-2 file:rounded-md file:border-0 file:bg-white file:px-2 file:py-1 file:text-xs file:font-semibold file:text-black hover:file:bg-neutral-200 focus:border-white/60 focus:outline-none"
+                          />
+                          <p className="text-[10px] text-white/50">PNG, JPG, or WEBP, max 10MB.</p>
+                        </div>
+                      )}
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-white/50">Caption (optional)</label>
+                        <input
+                          type="text"
+                          value={s.evidence.caption}
+                          onChange={(e) => updateStepEvidence(idx, "caption", e.target.value)}
+                          placeholder="Short caption for this step"
+                          className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
             {steps.length < MAX_STEPS && (
@@ -1075,113 +1193,10 @@ export default function WizardPage() {
                 ))}
               </div>
             </Field>
-
-            <Field
-              label="Where it happened"
-              helper="Which part of the journey does this barrier sit in?"
-              required
-              error={errors.whereHappened || errors.whereOther}
-            >
-              <div className="space-y-2">
-                <select
-                  value={whereHappened}
-                  onChange={(e) => setWhereHappened(e.target.value)}
-                  className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white focus:border-white/60 focus:outline-none"
-                >
-                  <option value="">Select…</option>
-                  <option value="arrival">Arrival</option>
-                  <option value="entry">Entry</option>
-                  <option value="navigation">Navigation</option>
-                  <option value="service_access">Service access</option>
-                  <option value="submission">Submission</option>
-                  <option value="exit">Exit</option>
-                  <option value="other">Other…</option>
-                </select>
-                {whereHappened === "other" && (
-                  <input
-                    type="text"
-                    value={whereOther}
-                    onChange={(e) => setWhereOther(e.target.value)}
-                    placeholder="Describe where this sits in the journey…"
-                    className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
-                  />
-                )}
-              </div>
-            </Field>
-
-            <Field
-              label="Status"
-              helper="Is this observed once, confirmed, or still needs verification?"
-              required
-              error={errors.status}
-            >
-              <div className="flex flex-wrap gap-2 text-[11px]">
-                {[
-                  ["observed", "Observed"],
-                  ["confirmed", "Confirmed"],
-                  ["needs_verification", "Needs verification"],
-                ].map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setStatus(value as Status)}
-                    className={`rounded-full border px-3 py-1 ${
-                      status === value
-                        ? "border-white bg-white text-black"
-                        : "border-white/30 bg-black text-white/80"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </Field>
           </div>
         )}
 
         {stepIndex === 6 && (
-          <div className="space-y-4">
-            <Field
-              label="Missing / unclear (interpretation)"
-              helper="What you couldn’t verify or what the system left ambiguous."
-              tooltip="What you couldn’t verify, or what the system left ambiguous."
-              required
-              error={errors.missingUnclear}
-              exampleBody="No public info for lift outages or where to check accessibility disruptions."
-            >
-              <textarea
-                value={missingUnclear}
-                onChange={(e) => setMissingUnclear(e.target.value)}
-                rows={3}
-                maxLength={1000}
-                className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
-                placeholder="e.g., No public info for lift outages or where to check accessibility disruptions."
-              />
-              <p className="mt-1 text-[10px] text-white/50">{missingUnclear.length}/1000</p>
-            </Field>
-
-            <Field
-              label="Suggested improvement (action)"
-              helper="A practical fix that could be implemented."
-              tooltip="A practical change someone could implement."
-              required
-              error={errors.suggestedImprovement}
-              exampleBody="Publish lift outage status on a single page + QR code at lift; add consistent signage to step-free routes."
-            >
-              <textarea
-                value={suggestedImprovement}
-                onChange={(e) => setSuggestedImprovement(e.target.value)}
-                rows={3}
-                maxLength={1000}
-                className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
-                placeholder="e.g., Publish lift outage status on a single page + QR code at lift; add consistent signage to step-free routes."
-              />
-              <p className="mt-1 text-[10px] text-white/50">{suggestedImprovement.length}/1000</p>
-            </Field>
-          </div>
-        )}
-
-        {stepIndex === 7 && (
           <div className="space-y-4">
             {getCompletionMissing().length > 0 && (
               <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3">
@@ -1222,9 +1237,8 @@ export default function WizardPage() {
               )}
             </div>
             <Field
-              label="Evidence (minimum 1 required)"
-              helper="Upload photo/screenshot or add an external URL. Caption required."
-              required
+              label="Additional evidence (optional)"
+              helper="You’ve already added step-level images or URLs in the Steps stage. If you’d like to attach any extra photos or links for the journey as a whole, you can add them here."
               error={errors.evidence}
             >
               <div className="mb-2 flex flex-wrap gap-2 text-[11px]">
@@ -1244,7 +1258,7 @@ export default function WizardPage() {
                 </button>
               </div>
               <p className="mb-2 text-[11px] text-white/60">
-                Before uploading or linking, check: no faces, no emails/student
+                If you add any, use a short caption. No faces, no emails/student
                 IDs, no confidential documents.
               </p>
               <div className="space-y-3">
@@ -1339,74 +1353,37 @@ export default function WizardPage() {
             </Field>
 
             <h3 className="text-sm font-semibold text-white/90">
-              Guidance / Policy URLs (Required)
+              Guidance / policy URL (optional)
             </h3>
-            <p className="text-[11px] text-white/60">
-              Link to an official policy, accessibility statement, or system
-              guidance relevant to this issue. Pick a link from Phase 0 below or enter a URL manually. Add more with the button.
+            <p className="text-[11px] text-white/60 mb-2">
+              If you’d like to attach a policy or accessibility link, pick one from the Phase 0 list below.
             </p>
-            <Field
-              label=""
-              required
-              error={errors.guidance}
-            >
-              <div className="space-y-2">
-                <div>
-                  <p className="mb-1 text-[10px] uppercase tracking-[0.12em] text-white/50">
-                    Use a link from a Phase 0 claim (optional)
-                  </p>
-                  {loggedClaims.length > 0 ? (
-                    <select
-                      value={loggedClaims.find((c) => c.source_url === guidanceUrls[0])?.id ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val) {
-                          const claim = loggedClaims.find((c) => c.id === val);
-                          if (claim) updateGuidance(0, claim.source_url);
-                        } else {
-                          updateGuidance(0, "");
-                        }
-                      }}
-                      className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white focus:border-white/60 focus:outline-none"
-                    >
-                      <option value="">No link from Phase 0 — I’ll enter a URL below</option>
-                      {loggedClaims.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.source_label || c.source_url} — {c.source_url}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <p className="rounded-md border border-white/20 bg-white/5 px-3 py-2 text-[12px] text-white/60">
-                      No Phase 0 claims yet. Log claims on the home page (Phase 0) to see links here, or enter a URL in the field below.
-                    </p>
-                  )}
-                </div>
-                {guidanceUrls.map((g, idx) => (
-                  <div key={idx}>
-                    {idx === 0 && (
-                      <p className="mb-1 text-[10px] uppercase tracking-[0.12em] text-white/50">
-                        {loggedClaims.length > 0 ? "Guidance URL (from dropdown above or enter here)" : "Guidance URL"}
-                      </p>
-                    )}
-                    <input
-                      type="url"
-                      value={g}
-                      onChange={(e) => updateGuidance(idx, e.target.value)}
-                      placeholder="e.g., https://www.arts.ac.uk/accessibility"
-                      className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-white/60 focus:outline-none"
-                    />
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={addGuidance}
-                className="rounded-full border-2 border-white bg-black px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white hover:bg-white/10"
+            {loggedClaims.length > 0 ? (
+              <select
+                value={loggedClaims.find((c) => c.source_url === guidanceUrls[0])?.id ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val) {
+                    const claim = loggedClaims.find((c) => c.id === val);
+                    if (claim) setGuidanceUrls([claim.source_url]);
+                  } else {
+                    setGuidanceUrls([]);
+                  }
+                }}
+                className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white focus:border-white/60 focus:outline-none"
               >
-                + Add another guidance URL
-              </button>
-              </div>
-            </Field>
+                <option value="">None</option>
+                {loggedClaims.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.source_label || c.source_url} — {c.source_url}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="rounded-md border border-white/20 bg-white/5 px-3 py-2 text-[12px] text-white/60">
+                No claims yet. Log claims on the home page (Phase 0) to add guidance links here.
+              </p>
+            )}
           </div>
         )}
 
@@ -1419,7 +1396,7 @@ export default function WizardPage() {
           >
             Back
           </button>
-          {stepIndex < 7 ? (
+          {stepIndex < 6 ? (
             <button
               type="button"
               onClick={goNext}

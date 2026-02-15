@@ -102,7 +102,7 @@ export default function MapPage() {
         <p className="mt-1 text-sm text-white/70">
           Each row is a place (building, floor, room or system) where at least
           one journey was logged. The number shows how many submissions were
-          made there — use it to spot repeated barriers in the same spot.
+          made there use it to spot repeated barriers in the same spot.
         </p>
       </div>
 

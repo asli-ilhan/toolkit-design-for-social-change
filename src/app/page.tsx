@@ -233,7 +233,7 @@ Use these starting points and add any other relevant pages you find as URLs you 
 • Minimum 2 steps.
 • Add at least one photo AND one guidance URL.
 
-20–35 min:
+20–30 min:
 • Log one complete digital journey.
 • Include screenshots.
 • Ensure "what happened" is factual, not interpretation.
@@ -253,7 +253,7 @@ Before Phase 2:
     },
     "3": {
       title: "PHASE 3 — Public Contribution",
-      instructions: `PHASE 3 — Public Contribution (All Groups)
+      instructions: `PHASE 3 — Public Contribution (All Groups) (25 min)
 
 1. Select approved journeys.
 2. Confirm no personal data.
@@ -369,20 +369,20 @@ Then:
           <div className="flex flex-col gap-3 rounded-xl border border-white/12 bg-white/[0.02] p-4">
             <h2 className="text-sm font-semibold">Module A — Categories & Governance</h2>
             <RoleInstructionsTimebox
-              text={`0–10 min:
+              text={`0–5 min:
 • Scan the feed.
 • Identify repeated barrier patterns.
 • Identify frequent use of "Other" values.
 
-10–20 min:
+5–10 min:
 • Submit 5–10 category suggestions.
 • Include: field_name, suggested_value, rationale.
 
-20–30 min:
+10–20 min:
 • Identify 2 schema weaknesses.
   (e.g. ambiguous field, missing enum option)
 
-30–40 min:
+20–25 min:
 • Propose 1 governance rule that improves data quality.
 
 Before Phase 3:
@@ -399,21 +399,21 @@ Before Phase 3:
           <div className="flex flex-col gap-3 rounded-xl border border-white/12 bg-white/[0.02] p-4">
             <h2 className="text-sm font-semibold">Module B — Storyboard & Public Expression</h2>
             <RoleInstructionsTimebox
-              text={`0–10 min:
+              text={`0–5 min:
 • Identify one clear theme emerging from the feed.
 
-10–20 min:
+5–10 min:
 • Select 3–6 strong journeys as supporting evidence.
 • Avoid incomplete or vague entries.
 
-20–30 min:
+10–20 min:
 • Complete structured story note:
   - Claim
   - Supporting evidence
   - What is missing
-  - Framing for Figma
+  - Framing for Toolkit Guidance
 
-30–40 min:
+20–25 min:
 • Decide how this will be expressed publicly:
   - Single-location issue?
   - Recurring pattern?
@@ -562,7 +562,7 @@ Before Phase 3:
             </p>
           </div>
           <Link
-            href="/examples/ual-w6-g3-001"
+            href="/journeys/example-1"
             className="self-start rounded-full border-2 border-white bg-black px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white hover:bg-white/10"
           >
             View full example entry
