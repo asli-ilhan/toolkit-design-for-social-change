@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
@@ -76,7 +76,7 @@ const SAMPLE_JOURNEY: Journey = {
 
 type FeedView = "journeys" | "claims";
 
-export default function FeedPage() {
+function FeedContent() {
   const [feedView, setFeedView] = useState<FeedView>("journeys");
   const [filters, setFilters] = useState<FilterState>({
     group: "",
@@ -665,6 +665,20 @@ export default function FeedPage() {
       </section>
     </div>
     </PhaseGroupGuard>
+  );
+}
+
+export default function FeedPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 py-12 text-center text-sm text-white/60">
+          Loading feed…
+        </div>
+      }
+    >
+      <FeedContent />
+    </Suspense>
   );
 }
 
