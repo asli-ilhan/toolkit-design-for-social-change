@@ -1,61 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { usePhase } from "@/lib/PhaseContext";
-import {
-  getRouteAccess,
-  getNavTooltip,
-  PHASE_LABELS,
-  type RouteId,
-} from "@/lib/accessControl";
 
-const NAV_ITEMS: { href: string; label: string; route: RouteId }[] = [
-  { href: "/wizard", label: "Log", route: "wizard" },
-  { href: "/feed", label: "Feed", route: "feed" },
-  { href: "/map", label: "Map", route: "map" },
-  { href: "/story-board", label: "Story Board", route: "storyboard" },
-  { href: "/category", label: "Category", route: "category" },
-  { href: "/wheelmap-helper", label: "WheelMap", route: "wheelmap" },
-  { href: "/osm-helper", label: "OSM", route: "osm" },
-  { href: "/export", label: "Export", route: "export" },
+const NAV_ITEMS: { href: string; label: string }[] = [
+  { href: "/wizard", label: "Log" },
+  { href: "/feed", label: "Feed" },
+  { href: "/map", label: "Map" },
+  { href: "/story-board", label: "Story Board" },
+  { href: "/category", label: "Category" },
+  { href: "/wheelmap-helper", label: "WheelMap" },
+  { href: "/osm-helper", label: "OSM" },
+  { href: "/export", label: "Export" },
 ];
 
-function NavLink({
-  href,
-  label,
-  access,
-  tooltip,
-}: {
-  href: string;
-  label: string;
-  access: "full" | "readonly" | "none";
-  tooltip: string;
-}) {
-  if (access === "none") {
-    return (
-      <span
-        className="cursor-not-allowed text-white/40"
-        title={tooltip || "This module becomes available in a later phase."}
-      >
-        {label}
-      </span>
-    );
-  }
-  const readOnlyTip = access === "readonly" ? " (read-only in this phase)" : "";
-  return (
-    <Link
-      href={href}
-      className={access === "readonly" ? "text-white/50 hover:text-white/70" : "text-white/60 hover:text-white"}
-      title={tooltip ? tooltip + readOnlyTip : readOnlyTip || undefined}
-    >
-      {label}
-    </Link>
-  );
-}
-
 export function AppHeader() {
-  const { phase } = usePhase();
-
   return (
     <header className="border-b border-white/10 bg-black/80 px-4 py-3 backdrop-blur-sm">
       <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4">
@@ -68,19 +26,15 @@ export function AppHeader() {
           </span>
         </Link>
         <nav className="hidden items-center gap-4 text-xs sm:flex">
-          {NAV_ITEMS.map(({ href, label, route }) => {
-            const access = getRouteAccess(phase, null, route);
-            const tooltip = getNavTooltip(route, phase, null, PHASE_LABELS);
-            return (
-              <NavLink
-                key={route}
-                href={href}
-                label={label}
-                access={access}
-                tooltip={tooltip}
-              />
-            );
-          })}
+          {NAV_ITEMS.map(({ href, label }) => (
+            <Link
+              key={href}
+              href={href}
+              className="text-white/60 hover:text-white"
+            >
+              {label}
+            </Link>
+          ))}
         </nav>
       </div>
     </header>
