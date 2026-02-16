@@ -152,10 +152,8 @@ export default function WizardPage() {
       case 3:
         return "Steps";
       case 4:
-        return "Outcome";
-      case 5:
         return "Classification";
-      case 6:
+      case 5:
         return "Evidence";
       default:
         return "";
@@ -220,16 +218,10 @@ export default function WizardPage() {
       if (expectedOutcome.trim().length < 10) {
         newErrors.expectedOutcome = "Write what should have happened (min 10 characters).";
       }
-      if (!accessResult) {
-        newErrors.accessResult = "Select the access result.";
-      }
-    }
-
-    if (index === 5) {
       if (!barrierType) newErrors.barrierType = "Pick the dominant barrier.";
     }
 
-    if (index === 6) {
+    if (index === 5) {
       evidenceItems.forEach((item, idx) => {
         if (item.caption.trim().length < 5) {
           newErrors[`evidence_${idx}_caption`] = "Caption must be at least 5 characters.";
@@ -283,7 +275,7 @@ export default function WizardPage() {
 
   const goNext = () => {
     if (!validateStep(stepIndex)) return;
-    setStepIndex((prev) => Math.min(6, prev + 1));
+    setStepIndex((prev) => Math.min(5, prev + 1));
   };
 
   const goBack = () => {
@@ -382,7 +374,7 @@ export default function WizardPage() {
           barrier_type: barrierType,
           where_happened: null,
           where_happened_other: null,
-          access_result: accessResult,
+          access_result: accessResult || "unclear",
           missing_or_unclear: null,
           suggested_improvement: null,
           status: "observed",
@@ -456,19 +448,6 @@ export default function WizardPage() {
           (fileItems[fileItems.length - 1] as any)._stepIndex = idx + 1;
         }
       });
-
-      guidanceUrls
-        .filter((g) => g.trim().length > 0)
-        .forEach((g) =>
-          evidenceRows.push({
-            journey_id: journeyId,
-            step_index: null,
-            type: "policy_doc",
-            storage_path: null,
-            external_url: g,
-            caption: "Guidance / policy URL",
-          }),
-        );
 
       const uploadedFileRows: any[] = [];
 
@@ -660,7 +639,7 @@ export default function WizardPage() {
           </div>
           <div className="hidden text-right text-[11px] text-white/60 sm:block">
             <div className="font-semibold text-white/80">
-              Step {stepIndex} of 7
+              Step {stepIndex} of 5
             </div>
             <div>{currentLabel}</div>
           </div>
@@ -670,14 +649,22 @@ export default function WizardPage() {
           <StepPill active={stepIndex === 1} index={1} label="Context" />
           <StepPill active={stepIndex === 2} index={2} label="Where" />
           <StepPill active={stepIndex === 3} index={3} label="Steps" />
-          <StepPill active={stepIndex === 4} index={4} label="Outcome" />
-          <StepPill active={stepIndex === 5} index={5} label="Classification" />
-          <StepPill active={stepIndex === 6} index={6} label="Evidence" />
+          <StepPill active={stepIndex === 4} index={4} label="Classification" />
+          <StepPill active={stepIndex === 5} index={5} label="Evidence" />
         </div>
       </div>
 
       <form
         onSubmit={handleSubmit}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          const target = e.target as HTMLElement;
+          if (target.tagName === "TEXTAREA") return;
+          const isSubmitButton =
+            target.tagName === "BUTTON" &&
+            (target as HTMLButtonElement).type === "submit";
+          if (!isSubmitButton) e.preventDefault();
+        }}
         className="space-y-4 rounded-xl border border-white/15 bg-white/[0.02] p-5"
       >
         <PrivacyBanner />
@@ -1047,12 +1034,7 @@ export default function WizardPage() {
                     setLinkedClaimId(val || null);
                     if (val) {
                       const claim = loggedClaims.find((c) => c.id === val);
-                      if (claim) {
-                        setClaimedAccessStatement(claim.claim_text);
-                        setGuidanceUrls((prev) => [claim.source_url, ...prev.slice(1)]);
-                      }
-                    } else {
-                      setGuidanceUrls((prev) => ["", ...prev.slice(1)]);
+                      if (claim) setClaimedAccessStatement(claim.claim_text);
                     }
                   }}
                   className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white focus:border-white/60 focus:outline-none"
@@ -1131,41 +1113,8 @@ export default function WizardPage() {
             </Field>
 
             <Field
-              label="Access result"
-              helper="How did this journey end for the user?"
-              required
-              error={errors.accessResult}
-            >
-              <div className="flex flex-wrap gap-2 text-[11px]">
-                {[
-                  ["granted", "Granted"],
-                  ["blocked", "Blocked"],
-                  ["partial", "Partial"],
-                  ["unclear", "Unclear"],
-                ].map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setAccessResult(value as AccessResult)}
-                    className={`rounded-full border px-3 py-1 ${
-                      accessResult === value
-                        ? "border-white bg-white text-black"
-                        : "border-white/30 bg-black text-white/80"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </Field>
-          </div>
-        )}
-
-        {stepIndex === 5 && (
-          <div className="space-y-4">
-            <Field
               label="Barrier type"
-              helper="Choose the dominant barrier. Mixed if it’s inseparable."
+              helper="Choose the dominant barrier. Mixed if it's inseparable."
               tooltip="Pick the dominant barrier; choose Mixed if inseparable."
               required
               error={errors.barrierType}
@@ -1196,7 +1145,8 @@ export default function WizardPage() {
           </div>
         )}
 
-        {stepIndex === 6 && (
+
+        {stepIndex === 5 && (
           <div className="space-y-4">
             {getCompletionMissing().length > 0 && (
               <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3">
@@ -1352,38 +1302,6 @@ export default function WizardPage() {
               </div>
             </Field>
 
-            <h3 className="text-sm font-semibold text-white/90">
-              Guidance / policy URL (optional)
-            </h3>
-            <p className="text-[11px] text-white/60 mb-2">
-              If you’d like to attach a policy or accessibility link, pick one from the Phase 0 list below.
-            </p>
-            {loggedClaims.length > 0 ? (
-              <select
-                value={loggedClaims.find((c) => c.source_url === guidanceUrls[0])?.id ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val) {
-                    const claim = loggedClaims.find((c) => c.id === val);
-                    if (claim) setGuidanceUrls([claim.source_url]);
-                  } else {
-                    setGuidanceUrls([]);
-                  }
-                }}
-                className="w-full rounded-md border border-white/25 bg-black px-3 py-2 text-sm text-white focus:border-white/60 focus:outline-none"
-              >
-                <option value="">None</option>
-                {loggedClaims.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.source_label || c.source_url} — {c.source_url}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <p className="rounded-md border border-white/20 bg-white/5 px-3 py-2 text-[12px] text-white/60">
-                No claims yet. Log claims on the home page (Phase 0) to add guidance links here.
-              </p>
-            )}
           </div>
         )}
 
@@ -1396,7 +1314,7 @@ export default function WizardPage() {
           >
             Back
           </button>
-          {stepIndex < 6 ? (
+          {stepIndex < 5 ? (
             <button
               type="button"
               onClick={goNext}
