@@ -310,7 +310,7 @@ export default function JourneyDetailPage() {
               {journey.campus_or_system}
             </span>
             <span className="rounded-full border border-white/20 px-2 py-[2px] text-white/70">
-              {journey.barrier_type} · {journey.access_result}
+              {journey.barrier_type}
             </span>
             {journey.issue_scope && (
               <span className="rounded-full border border-amber-400/50 px-2 py-[2px] text-amber-200">
