@@ -94,6 +94,14 @@ function FeedContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [journeyIdsWithGuidance, setJourneyIdsWithGuidance] = useState<Set<string>>(new Set());
+  const [deletingJourneyId, setDeletingJourneyId] = useState<string | null>(null);
+  const [deletingClaimId, setDeletingClaimId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{
+    type: "journey" | "claim";
+    id: string;
+    step: 1 | 2;
+    label?: string;
+  } | null>(null);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { phase } = usePhase();
@@ -223,6 +231,52 @@ function FeedContent() {
 
   const handleClaimFilterChange = (key: keyof ClaimFilterState, value: string) => {
     setClaimFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const openDeleteConfirm = (type: "journey" | "claim", id: string, label?: string) => {
+    if (type === "journey" && id === "example-1") return;
+    setConfirmDelete({ type, id, step: 1, label });
+  };
+
+  const handleConfirmDeleteNext = async () => {
+    if (!confirmDelete) return;
+    if (confirmDelete.step === 1) {
+      setConfirmDelete((prev) => (prev ? { ...prev, step: 2 } : null));
+      return;
+    }
+    const { type, id } = confirmDelete;
+    setConfirmDelete(null);
+    if (type === "journey") {
+      setDeletingJourneyId(id);
+      try {
+        const supabase = getSupabaseClient();
+        await supabase.from("journey_steps").delete().eq("journey_id", id);
+        await supabase.from("evidence").delete().eq("journey_id", id);
+        const { error } = await supabase.from("journeys").delete().eq("id", id);
+        if (error) throw error;
+        setJourneys((prev) => prev.filter((x) => x.id !== id));
+      } catch (err: any) {
+        alert(err?.message ?? "Could not delete.");
+      } finally {
+        setDeletingJourneyId(null);
+      }
+    } else {
+      setDeletingClaimId(id);
+      try {
+        const supabase = getSupabaseClient();
+        const { error } = await supabase.from("claimed_access_statements").delete().eq("id", id);
+        if (error) throw error;
+        setClaims((prev) => prev.filter((x) => x.id !== id));
+      } catch (err: any) {
+        alert(err?.message ?? "Could not delete.");
+      } finally {
+        setDeletingClaimId(null);
+      }
+    }
+  };
+
+  const handleConfirmDeleteCancel = () => {
+    setConfirmDelete(null);
   };
 
   const filteredClaims = claims.filter((c) => {
@@ -552,12 +606,24 @@ function FeedContent() {
                     return null;
                   })()}
                 </div>
-                <Link
-                  href={`/journeys/${j.id}`}
-                  className="rounded-full border-2 border-white bg-black px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white hover:bg-white/10"
-                >
-                  View
-                </Link>
+                <div className="flex items-center gap-2">
+                  <Link
+                    href={`/journeys/${j.id}`}
+                    className="rounded-full border-2 border-white bg-black px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white hover:bg-white/10"
+                  >
+                    View
+                  </Link>
+                  {j.id !== "example-1" && (
+                    <button
+                      type="button"
+                      onClick={() => openDeleteConfirm("journey", j.id, j.journey_code)}
+                      disabled={deletingJourneyId === j.id}
+                      className="rounded-full border border-red-500/60 px-3 py-1 text-[10px] font-semibold text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+                    >
+                      {deletingJourneyId === j.id ? "Deleting…" : "Delete"}
+                    </button>
+                  )}
+                </div>
               </div>
             </article>
           ))}
@@ -656,6 +722,14 @@ function FeedContent() {
                 {c.created_name && (
                   <span className="text-white/60">Logged by {c.created_name}</span>
                 )}
+                <button
+                  type="button"
+                  onClick={() => openDeleteConfirm("claim", c.id)}
+                  disabled={deletingClaimId === c.id}
+                  className="rounded-full border border-red-500/60 px-3 py-1 text-[10px] font-semibold text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+                >
+                  {deletingClaimId === c.id ? "Deleting…" : "Delete"}
+                </button>
               </div>
             </article>
           ))}
@@ -663,6 +737,66 @@ function FeedContent() {
           </>
         )}
       </section>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+          <div className="w-full max-w-md rounded-xl border border-white/20 bg-black p-5 shadow-xl">
+            {confirmDelete.step === 1 ? (
+              <>
+                <h3 className="text-base font-semibold text-white">
+                  {confirmDelete.type === "journey"
+                    ? "Delete this journey?"
+                    : "Delete this logged claim?"}
+                </h3>
+                <p className="mt-2 text-sm text-white/70">
+                  This cannot be undone. You will need to re-log if you delete by mistake.
+                </p>
+                <div className="mt-5 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleConfirmDeleteCancel}
+                    className="rounded-full border border-white/30 bg-black px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmDeleteNext}
+                    className="rounded-full border-2 border-red-500/70 bg-red-500/20 px-4 py-2 text-xs font-semibold text-red-200 hover:bg-red-500/30"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-base font-semibold text-amber-200">
+                  Are you sure?
+                </h3>
+                <p className="mt-2 text-sm text-white/70">
+                  This will permanently remove it. Click &quot;Yes, delete&quot; only if you are certain.
+                </p>
+                <div className="mt-5 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleConfirmDeleteCancel}
+                    className="rounded-full border border-white/30 bg-black px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmDeleteNext}
+                    className="rounded-full border-2 border-red-500 bg-red-600/80 px-4 py-2 text-xs font-semibold text-white hover:bg-red-600"
+                  >
+                    Yes, delete
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
     </PhaseGroupGuard>
   );
